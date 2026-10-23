@@ -1,2 +1,11 @@
-# us-macro-dashboard
-Interactive dashboard of US macroeconomic indicators, liquidity, markets and Treasury yields.
+# US Macro Dashboard
+
+[Открыть дашборд](https://alexvispio-hue.github.io/us-macro-dashboard/)
+
+Интерактивный дашборд экономических показателей США: ставки, риск, ликвидность, кредит, экономический цикл, недвижимость и рынки.
+
+`index.html` — готовая страница со встроенными данными и библиотекой графиков. Её можно скачать и открыть локально без интернета.
+
+Сайт показывает опубликованный снимок данных. Обновление не происходит автоматически. Для обновления замените `index.html` новой сборкой дашборда.
+
+GitHub Pages: ветка `main`, каталог `/ (root)`.
