@@ -1,0 +1,957 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Macro Dashboard</title>
+<style>
+  :root{
+    --bg:#000000; --pane:#08090c; --line:#1b1e24; --line2:#2a2e36;
+    --txt:#e8e8e8; --dim:#7d838d; --chip:#12141a;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);
+    font:12px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;}
+  header{display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+    padding:8px 14px;border-bottom:1px solid var(--line);background:#050609;
+    position:sticky;top:0;z-index:20;}
+  header h1{margin:0;font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+  .meta{color:var(--dim);font-size:11px}
+  .hint{color:#5a616b;font-size:11px}
+  .rangebar{display:flex;gap:4px;margin-left:auto}
+  .rangebar button{background:var(--chip);color:var(--dim);border:1px solid var(--line2);
+    border-radius:4px;padding:3px 10px;font-size:11px;cursor:pointer;font-weight:600}
+  .rangebar button:hover{color:var(--txt);border-color:#3d434d}
+  .rangebar button.on{background:#1e2a3a;color:#7fb2ff;border-color:#2f5480}
+
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);
+    height:calc(100vh - 74px)}
+  .col{background:var(--bg);display:flex;flex-direction:column;min-width:0;overflow:hidden}
+  .colhead{flex:0 0 auto;padding:5px 10px;font-size:10px;font-weight:700;letter-spacing:.12em;
+    color:var(--dim);background:#05070a;border-bottom:1px solid var(--line)}
+  .colbody{flex:1 1 auto;display:flex;flex-direction:column;min-height:0;overflow-y:auto}
+  .pane{position:relative;border-bottom:1px solid var(--line);background:var(--pane);
+    min-height:68px}
+  .pane .cap{position:absolute;left:5px;top:4px;z-index:5;pointer-events:none;
+    display:flex;flex-direction:column;gap:1px;align-items:flex-start;max-width:calc(100% - 78px)}
+  .pane .cap .t{font-size:11.5px;font-weight:800;letter-spacing:.01em;
+    padding:1px 6px;border-radius:3px;color:#08090c;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  .pane .cap .s{font-size:9.5px;color:#727984;background:rgba(6,7,10,.82);
+    padding:0 4px;border-radius:2px;max-width:100%;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap}
+  .pane .cap .v{font-size:10px;font-weight:600;color:#aab1bb;background:rgba(6,7,10,.82);
+    padding:0 4px;border-radius:2px;white-space:nowrap;overflow:hidden;
+    text-overflow:ellipsis;max-width:100%}
+  .leg{margin-right:9px;white-space:nowrap}
+  .leg i{display:inline-block;width:7px;height:7px;border-radius:2px;
+    margin-right:4px;vertical-align:baseline}
+  .legdate{color:#7d838d;margin-right:12px;font-weight:500}
+  .pane .expand{position:absolute;right:4px;top:4px;z-index:6;cursor:pointer;
+    width:20px;height:20px;display:grid;place-items:center;border-radius:3px;
+    background:rgba(10,12,16,.7);border:1px solid transparent;color:#6b727d;
+    font-size:12px;line-height:1;opacity:0;transition:opacity .12s}
+  .pane:hover .expand{opacity:1}
+  .pane .expand:hover{color:#cfd4db;border-color:var(--line2);background:#141821}
+  .pane.empty::after{content:"нет данных";position:absolute;inset:0;display:grid;
+    place-items:center;color:#3f444d;font-size:11px;letter-spacing:.1em}
+  footer{padding:8px 14px;color:#4a4f58;font-size:10px;border-top:1px solid var(--line);
+    display:flex;gap:14px;flex-wrap:wrap}
+
+  /* ---------------- развёрнутый график ---------------- */
+  #modal{position:fixed;inset:0;z-index:100;background:#04050a;
+    display:none;flex-direction:column;padding:14px}
+  #modal.open{display:flex}
+  #modal .bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+    padding:0 2px 10px 2px}
+  #modal .mtitle{font-size:15px;font-weight:800;letter-spacing:.01em;
+    padding:2px 9px;border-radius:4px;color:#08090c}
+  #modal .msub{color:#7d838d;font-size:11px;max-width:46vw}
+  #modal .mval{color:#cfd4db;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+  #modal .mval .leg{margin-right:14px}
+  #modal .mval .leg i{width:9px;height:9px;margin-right:5px}
+  #modal .spacer{margin-left:auto}
+  #modal button{background:var(--chip);color:var(--dim);border:1px solid var(--line2);
+    border-radius:4px;padding:4px 11px;font-size:11px;cursor:pointer;font-weight:600}
+  #modal button:hover{color:var(--txt);border-color:#3d434d}
+  #modal button.on{background:#1e2a3a;color:#7fb2ff;border-color:#2f5480}
+  #modal .close{font-size:15px;padding:2px 10px}
+  #mchart{flex:1 1 auto;min-height:0;border:1px solid var(--line);background:var(--pane)}
+  #modal .foot{padding-top:8px;color:#4a4f58;font-size:10px}
+
+  @media (max-width:1400px){ .grid{grid-template-columns:repeat(2,1fr)} }
+  @media (max-width:820px){ .grid{grid-template-columns:1fr} }
+  @media (max-height:900px){ .pane .cap .s{display:none} }
+
+  button{font:inherit;cursor:pointer}
+  .toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:7px 14px;background:#0b0e13;border-bottom:1px solid #252932}
+  .toolbar button,.curve-controls button{border:1px solid #303642;background:#111720;color:#b7c1d0;border-radius:4px;padding:5px 11px}
+  .toolbar button.on,.curve-controls button.on{color:#a9d2ff;border-color:#5580ad;background:#182a3e}
+  .toolbar .divider{height:18px;border-left:1px solid #303642;margin:0 5px}
+  #page-title{min-width:150px;color:#d8e1ef;font-weight:600}
+  .grid{height:calc(100vh - 114px);min-height:540px}
+  .grid.markets{grid-template-columns:1.12fr 1.12fr 1fr}
+  .pane{min-height:92px}
+  .pane .expand{opacity:1}
+  .plot{position:absolute;inset:0}
+  .overlay{position:absolute;inset:0;pointer-events:none;z-index:2}
+  #mchart{position:relative}
+  #mchart>.plot{inset:0}
+  .market-note{padding:9px 12px;color:#8f9cae;font-size:11px;line-height:1.5;border-top:1px solid #242a34}
+  .curve-wrap{background:#08090c;padding:15px;overflow:auto;min-width:0}
+  .curve-wrap h2{font-size:13px;letter-spacing:.06em;margin:0 0 4px}
+  .curve-wrap.fullscreen{position:fixed;inset:12px;z-index:110;border:1px solid #354052}
+  .curve-wrap.fullscreen .curve-svg{height:50vh}
+  .curve-expand{float:right;padding:4px 10px;background:#142030;color:#b2d3f7;border:1px solid #344b68;border-radius:4px}
+  .curve-wrap p{color:#8e99aa;font-size:11px;line-height:1.6}
+  .curve-controls{display:flex;gap:5px;flex-wrap:wrap;margin:16px 0 8px}
+  .curve-svg{width:100%;height:300px;display:block}
+  .curve-table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;font-size:11px}
+  .curve-table th,.curve-table td{padding:7px 5px;text-align:right;border-bottom:1px solid #202631}
+  .curve-table th:first-child,.curve-table td:first-child{text-align:left}
+  .curve-table th{color:#828fa4;font-weight:500}
+  .curve-table tr:hover{background:#141c29}
+  .curve-tip{min-height:32px;font-size:11px;color:#c5d1e0}
+  .source-link{color:#82aee0}
+  .legend-box{padding:10px 0;border-top:1px solid #28303b;margin-top:16px}
+  .legend-box summary{cursor:pointer;color:#a4b1c2}
+  .legend-box p{margin:8px 0}
+  .pane.empty::after{content:'Нет данных · см. источники';pointer-events:none}
+  @media(max-width:1400px){.grid:not(.markets){grid-template-columns:repeat(4,minmax(230px,1fr));overflow-x:auto}}
+  @media(max-width:1050px){.grid.markets{grid-template-columns:1fr 1fr;height:auto}.markets .col{height:950px}.curve-wrap{grid-column:1/-1}.curve-svg{height:340px}}
+  @media(max-width:700px){.grid:not(.markets),.grid.markets{grid-template-columns:1fr;height:auto}.col{height:1000px}.curve-wrap{grid-column:auto}.meta,.hint{display:none}header{gap:8px}.rangebar{margin-left:0}.toolbar{gap:5px}#modal{padding:6px}#modal .msub{max-width:100%;font-size:10px}}
+
+  /* Terminal workspace: restrained color, readable cards and persistent navigation. */
+  :root{--bg:#0b1016;--pane:#101720;--line:#202c38;--line2:#304150;--txt:#dce5ee;--dim:#8092a5;--chip:#15202b;--accent:#5bd8c0}
+  body{font:12px/1.45 "Segoe UI",Arial,sans-serif;padding-left:252px}
+  button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+  .sidebar{position:fixed;inset:0 auto 0 0;width:252px;background:#0c131b;border-right:1px solid var(--line);z-index:40;display:flex;flex-direction:column}
+  .brand{padding:25px 22px 22px;display:flex;gap:12px;align-items:center;border-bottom:1px solid var(--line)}
+  .brand-mark{width:34px;height:34px;background:#173b36;border:1px solid #2e665c;border-radius:9px;color:#76e5cc;display:grid;place-items:center;font-size:21px}
+  .brand strong{display:block;letter-spacing:.15em;font-size:12px}.brand small{display:block;color:#667b8f;font-size:10px;letter-spacing:.12em;margin-top:3px}
+  .nav-label{padding:20px 20px 9px;color:#5f778c;font-size:10px;letter-spacing:.17em;font-weight:600}
+  .search-wrap{margin:0 14px 13px;position:relative}.search-wrap span{position:absolute;left:11px;top:8px;color:#6c8397}
+  #workspace-search{width:100%;padding:10px 10px 10px 29px;border-radius:6px;background:#101c27;border:1px solid #253342;color:#dce5ee;font:11px "Segoe UI",sans-serif}
+  #workspace-nav{overflow-y:auto;flex:1;padding:0 10px 20px;scrollbar-width:thin;scrollbar-color:#2b3c4d transparent}
+  .nav-item{width:100%;border:1px solid transparent;border-radius:5px;background:transparent;color:#8e9eb0;text-align:left;padding:9px 11px;display:flex;align-items:center;gap:9px;font-size:11px;margin:2px 0}
+  .nav-item .nav-text{flex:1}.nav-item .nav-count{font-size:10px;color:#657d90;font-variant-numeric:tabular-nums}.nav-item:hover{background:#14212d;color:#d6e9ed}
+  .nav-item[aria-current=page]{background:#16342f;border-color:#235348;color:#7fe4cc}.nav-item[aria-current=page] .nav-count{color:#7bbcaf}
+  .nav-group{margin-top:14px}.nav-group summary{padding:8px 11px;color:#7b94a7;font-size:10px;letter-spacing:.12em;cursor:pointer}.nav-group .nav-item{padding-left:21px}
+  .sidebar-foot{border-top:1px solid var(--line);padding:16px 21px;font-size:10px;color:#668092}.status-dot{display:inline-block;width:6px;height:6px;background:#5bd8c0;border-radius:50%;margin-right:7px;box-shadow:0 0 9px #5bd8c033}
+  header{height:65px;padding:0 28px;background:#0d141d;gap:15px;border-color:var(--line);position:static;flex-wrap:nowrap}
+  header h1{font-size:10px;color:#879bad;font-weight:500;letter-spacing:.13em}header .hint{display:none}header .meta{font-size:10px;color:#5e768c}
+  .rangebar{gap:3px}.rangebar button{padding:5px 9px;border-color:transparent;background:transparent;font-size:10px;border-radius:5px;color:#8195a9}.rangebar button.on{background:#19352f;border-color:#2a574b;color:#7be2c8}
+  .top-tag{font-size:9px;color:#6f8a9e;border:1px solid #2a3a47;padding:4px 7px;border-radius:4px;letter-spacing:.08em}
+  .workspace-head{padding:26px 28px 18px;display:flex;align-items:flex-start;gap:20px}.eyebrow{font-size:9px;letter-spacing:.17em;color:#5bd8c0;margin-bottom:7px}.workspace-head h2{font-weight:500;font-size:25px;letter-spacing:-.035em;margin:0 0 6px}.workspace-head p{margin:0;color:#7e91a4;font-size:11px;max-width:820px;line-height:1.7}.head-badge{margin-left:auto;white-space:nowrap;color:#7ea79c;font-size:10px;background:#12251f;border:1px solid #254036;padding:7px 10px;border-radius:5px}
+  .metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:0 28px 22px}.metric{position:relative;overflow:hidden;border:1px solid var(--line);border-radius:8px;background:#101821;padding:15px 17px;min-height:102px}.metric-label{font-size:10px;color:#92a5b6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:75%}.metric-value{font-size:24px;font-weight:500;letter-spacing:-.04em;margin:8px 0 2px;font-variant-numeric:tabular-nums}.metric-date{color:#607c91;font-size:9px}.metric svg{position:absolute;right:13px;top:38px;width:72px;height:32px;opacity:.65}
+  .toolbar{margin:0 28px;padding:11px 0 14px;background:none;border-color:var(--line);gap:6px}.toolbar .meta:last-child{margin-left:auto;font-size:9px;color:#5e7488}.toolbar button{padding:4px 9px;font-size:10px;background:#111c27;border-color:#283746}.toolbar button.on{background:#19352f;color:#86dfcc;border-color:#31584d}#page-title{font-size:11px;min-width:0;margin-right:8px}.toolbar .divider{border-color:#283746;margin:0 9px}.toolbar #page-prev,.toolbar #page-next{display:none}
+  .grid,.grid:not(.markets),.grid.markets{display:grid;gap:14px;background:transparent;height:auto;min-height:0;padding:17px 28px;overflow:visible;align-items:start}
+  .col,.markets .col{background:none;height:auto;overflow:visible}.colhead{font-size:9px;font-weight:500;color:#5f788e;background:none;padding:0 1px 10px;border:0;letter-spacing:.12em}.colbody{overflow:visible;gap:14px}
+  .pane{border:1px solid var(--line);border-radius:7px;background:#101720;height:256px;min-height:256px;flex:none!important;overflow:hidden}.pane .cap{top:13px;left:13px;gap:3px}.pane .cap .t{background:transparent!important;color:#d5e0ea;border-radius:0;padding:0;font-size:11px;font-weight:500;letter-spacing:0}.pane .cap .s{display:block;font-size:8px;background:transparent;color:#60798e;padding:0}.pane .cap .v{font-size:10px;background:#101720e8;padding:0;color:#b3c4d2}.pane .expand{top:10px;right:10px;border:1px solid #283746;width:23px;height:23px;color:#708c9f;background:#14202b}.pane.empty::after{padding-top:65px;color:#647f93;font-size:10px;letter-spacing:0}.plot{top:65px}.overlay{top:0;height:100%}
+  .curve-wrap{border:1px solid var(--line);border-radius:7px;background:#101720;padding:19px}.curve-wrap h2{font-size:11px}.curve-wrap.fullscreen{background:#101720}.curve-wrap .legend-box{font-size:10px}.curve-wrap p{font-size:10px}
+  .data-monitor{margin:5px 28px 24px;border:1px solid var(--line);border-radius:7px;overflow:auto;background:#0e161f}.monitor-head{padding:14px 17px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;color:#a6bbca;font-size:10px;letter-spacing:.1em}.monitor-head span{color:#536f83;font-size:9px;letter-spacing:0}.monitor-table{width:100%;border-collapse:collapse;font-size:10px;text-align:left;white-space:nowrap}.monitor-table th{font-weight:400;color:#5d7b91;font-size:9px;padding:11px 16px}.monitor-table td{padding:10px 16px;border-top:1px solid #1a2733;color:#91a8bb}.monitor-table td:first-child{color:#c0d0dd}.monitor-table button{background:none;border:0;color:inherit;padding:0;font:inherit;text-align:left}.monitor-table button:hover{color:var(--accent)}.monitor-table .missing{color:#dcad71}.monitor-table .ok{color:#69bba4}
+  footer{padding:0 28px 23px;border:0;font-size:9px;color:#4e697e;gap:7px 18px}footer #diag{width:100%;color:#7b91a3}
+  ::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-thumb{background:#2b3c4b;border-radius:6px}
+  #modal{background:#0c131b}#mchart{background:#101720}.empty-search{padding:15px;color:#7f97aa;font-size:11px}
+  @media(min-width:1600px){.pane{height:290px;min-height:290px}}
+  @media(max-width:1150px){body{padding-left:220px}.sidebar{width:220px}header{padding:0 20px}.rangebar button{padding:5px 6px}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.grid,.grid:not(.markets),.grid.markets{grid-template-columns:repeat(2,minmax(0,1fr))!important}.curve-wrap{grid-column:1/-1}.toolbar .meta:last-child{display:none}.workspace-head h2{font-size:22px}}
+  @media(max-width:760px){body{padding-left:0}.sidebar{position:relative;width:100%;max-height:290px;border-right:0;border-bottom:1px solid var(--line)}.brand{padding:12px 18px}.brand-mark{width:28px;height:28px}.sidebar-foot,.nav-label{display:none}.search-wrap{margin-top:12px}#workspace-nav{min-height:75px;max-height:170px}.nav-group{margin-top:3px}.sidebar details{display:block}.sidebar header{height:auto}header{height:auto;padding:12px 16px;flex-wrap:wrap}header .meta{display:block}.top-tag{margin-left:auto}.rangebar{width:100%;margin:0}.rangebar button{flex:1}.workspace-head{padding:22px 16px 16px}.head-badge{display:none}.metrics{padding:0 16px 18px;gap:8px}.metric{padding:12px;min-height:94px}.metric-value{font-size:21px}.metric svg{width:45px;right:10px}.toolbar{margin:0 16px;gap:5px;flex-wrap:wrap}.toolbar .meta{display:none}.toolbar .divider{margin:0 3px}.grid,.grid:not(.markets),.grid.markets{grid-template-columns:minmax(0,1fr)!important;padding:15px 16px}.col,.markets .col{height:auto}.pane{height:280px;min-height:280px}.data-monitor{margin:4px 16px 20px}footer{padding:0 16px 20px}.colhead{padding-bottom:8px}.curve-wrap{grid-column:auto}}
+
+</style>
+</head>
+<body>
+
+<aside class="sidebar" aria-label="Навигация по рынкам">
+  <div class="brand"><span class="brand-mark">◈</span><div><strong>MACROVIEW</strong><small>ECONOMIC INTELLIGENCE</small></div></div>
+  <div class="nav-label">WORKSPACES / ОБЗОР РЫНКОВ</div>
+  <div class="search-wrap"><span>⌕</span><input id="workspace-search" type="search" placeholder="Найти раздел или показатель…" aria-label="Поиск разделов и показателей"></div>
+  <nav id="workspace-nav" aria-label="Разделы дашборда"></nav>
+  <div class="sidebar-foot"><span class="status-dot"></span>Публичные источники · снимок данных</div>
+</aside>
+<header>
+  <h1>Research terminal / US & global</h1><span class="top-tag">MACRO · V15</span>
+  <span class="meta" id="meta"></span>
+  <span class="hint">двойной клик по панели — развернуть</span>
+  <div class="rangebar" id="rangebar">
+    <button data-d="1">1Д</button>
+    <button data-d="7">1Н</button>
+    <button data-d="31">1М</button>
+    <button data-d="365">1Г</button>
+    <button data-d="1095">3Г</button>
+    <button data-d="1825" class="on">5Л</button>
+    <button data-d="0">Всё</button>
+    <button id="syncbtn" aria-pressed="false" title="Связать масштаб графиков. По умолчанию каждый график управляется независимо.">⇄ Связать</button>
+  </div>
+</header>
+
+<section class="workspace-head"><div><div class="eyebrow" id="workspace-family">WORKSPACE / OVERVIEW</div><h2 id="workspace-title">Обзор макрорынка</h2><p id="workspace-note">Ключевые показатели экономики и финансовых рынков в одном пространстве.</p></div><span class="head-badge" id="workspace-badge"></span></section>
+<section class="metrics" id="metrics" aria-label="Последние наблюдения"></section>
+<nav class="toolbar" aria-label="Страницы и графики">
+  <button id="page-prev" aria-label="Предыдущая страница">←</button><span id="page-title">1 / 2 · Макрообзор</span><button id="page-next" aria-label="Следующая страница">→</button>
+  <span class="divider"></span><span class="meta">Интервал</span>
+  <button data-tf="D" class="on">День</button><button data-tf="W">Неделя</button>
+  <span class="divider"></span><button id="zoom-in" title="Приблизить">＋</button><button id="zoom-out" title="Отдалить">−</button><button id="reset-view">Сброс</button>
+  <span class="meta">Колесо — масштаб · перетаскивание — сдвиг · ⤢ — развернуть</span>
+</nav>
+<div class="grid" id="grid"></div>
+
+<section class="data-monitor" aria-label="Данные текущего раздела"><div class="monitor-head">SERIES MONITOR <span>Значения и даты наблюдений источника</span></div><table class="monitor-table"><thead><tr><th>ПОКАЗАТЕЛЬ</th><th>РЯД</th><th>ЗНАЧЕНИЕ</th><th>ДАТА</th><th>СТАТУС</th></tr></thead><tbody id="monitor-body"></tbody></table></section>
+<footer>
+  <span id="diag"></span>
+  <span>Источники: FRED, ЕЦБ, Банк Японии, Банк Англии, НБК, Минфин Японии, Yahoo Finance</span>
+  <span>Графики: TradingView Lightweight Charts™ · COT: CFTC</span>
+</footer>
+
+<div id="modal">
+  <div class="bar">
+    <span class="mtitle" id="mtitle"></span>
+    <span class="msub" id="msub"></span>
+    <span class="mval" id="mval"></span>
+    <span class="spacer"></span>
+    <button data-my="1">1Д</button>
+    <button data-my="7">1Н</button>
+    <button data-my="31">1М</button>
+    <button data-my="365">1Г</button>
+    <button data-my="1095">3Г</button>
+    <button data-my="1825">5Л</button>
+    <button data-my="0">Всё</button>
+    <button data-tf="D" class="on">День</button><button data-tf="W">Неделя</button>
+    <button id="mzoom-in">＋</button><button id="mzoom-out">−</button><button id="mreset">Сброс</button><button id="mlog">лог</button>
+    <button id="mprev" title="стрелка влево">◀</button>
+    <button id="mnext" title="стрелка вправо">▶</button>
+    <button class="close" id="mclose" title="Esc">✕</button>
+  </div>
+  <div id="mchart"></div>
+  <div class="foot" id="mfoot"></div>
+</div>
+
+<script>/*__LIB__*/</script>
+<script>
+const DASH = /*__DATA__*/;
+
+(function () {
+  if (typeof LightweightCharts === "undefined") {
+    document.body.innerHTML =
+      '<p style="padding:24px;color:#ef5350">Не загрузилась библиотека графиков. ' +
+      'Проверь, что файл web/vendor/lightweight-charts.js на месте, и пересобери.</p>';
+    return;
+  }
+
+  const LC = LightweightCharts;
+  const charts = [];      // встроенные панели
+  const PANELS = [];      // плоский список для навигации в развёрнутом виде
+  let rafId = 0, pendingTime = null;
+  let timeframe = 'D', page = 0;
+  const sourcePanels = [...DASH.columns,...(DASH.markets?.columns||[])].flatMap(c=>c.panels);
+  const findPanel = id => sourcePanels.find(p=>p.id===id);
+  const PAGES = [
+    {id:'overview',family:'WORKSPACE',title:'Обзор макрорынка',note:'Ставки, ликвидность и экономический цикл. Публичные данные, прозрачные расчёты.',columns:[
+      {title:'РЫНОК / ДЕНЕЖНАЯ ПОЛИТИКА',panels:['spy','ffr'].map(findPanel).filter(Boolean)},
+      {title:'ЛИКВИДНОСТЬ / ДЕНЕЖНАЯ МАССА',panels:['netliq','gm2'].map(findPanel).filter(Boolean)},
+      {title:'ЭКОНОМИЧЕСКИЙ ЦИКЛ / СТРЕСС',panels:['sahm','stress'].map(findPanel).filter(Boolean)}]},
+    {id:'markets',family:'WORKSPACE',title:'Рынки и позиционирование',note:'SPY, золото, волатильность, позиции CFTC и кривая US Treasury.',columns:DASH.markets?.columns||[],curve:true},
+    ...(DASH.workspaces||[]),
+    {id:'allmacro',family:'WORKSPACE',title:'Все макропанели',note:'Полный исходный набор показателей и композитов.',columns:DASH.columns}
+  ];
+  const nav = document.getElementById('workspace-nav');
+  function navigate(index){closeModal();page=index;renderColumns();window.scrollTo({top:0,behavior:'instant'});}
+  function renderNav(query=''){
+    const expanded=new Map([...nav.querySelectorAll('details')].map(d=>[d.querySelector('summary').textContent,d.open]));
+    const scrollTop=nav.scrollTop;
+    nav.replaceChildren();const q=query.trim().toLocaleLowerCase('ru');let family='',group=nav,count=0;
+    PAGES.forEach((entry,i)=>{
+      const match=(entry.title+' '+entry.family+' '+entry.columns.flatMap(c=>c.panels).map(p=>p.title+' '+p.series.map(s=>s.name).join(' ')).join(' ')).toLocaleLowerCase('ru');
+      if(q && !match.includes(q))return;
+      if(entry.family!==family){family=entry.family;if(family==='WORKSPACE')group=nav;else{const details=document.createElement('details');details.className='nav-group';details.open=q?true:(expanded.get(family)??true);const summary=document.createElement('summary');summary.textContent=family;details.appendChild(summary);nav.appendChild(details);group=details;}}
+      const b=document.createElement('button');b.className='nav-item';b.setAttribute('aria-current',i===page?'page':'false');b.dataset.page=i;
+      const name=document.createElement('span');name.className='nav-text';name.textContent=entry.title;
+      const badge=document.createElement('span');badge.className='nav-count';badge.textContent=entry.columns.reduce((n,c)=>n+c.panels.length,0)+(entry.curve?' + ↗':'');
+      b.append(name,badge);b.onclick=()=>navigate(i);group.appendChild(b);count++;
+    });
+    nav.scrollTop=scrollTop;
+    if(!count){const e=document.createElement('p');e.className='empty-search';e.textContent='Ничего не найдено. Попробуйте CPI, ВВП или ставки.';nav.appendChild(e);}
+  }
+  document.getElementById('workspace-search').addEventListener('input',e=>renderNav(e.target.value));
+  function updateWorkspace(){
+    const entry=PAGES[page],panels=entry.columns.flatMap(c=>c.panels);
+    document.getElementById('workspace-title').textContent=entry.title;
+    document.getElementById('workspace-family').textContent=entry.family+' / MARKET RESEARCH';
+    document.getElementById('workspace-note').textContent=entry.note||'Наблюдения публичных источников. Дата каждого ряда показана в таблице ниже.';
+    const ready=panels.filter(p=>p.series.some(s=>s.data?.length)).length;
+    document.getElementById('workspace-badge').textContent=ready+' / '+panels.length+' панелей с данными';
+    document.getElementById('page-title').textContent='Графики · '+panels.length;
+    const metrics=document.getElementById('metrics');metrics.replaceChildren();
+    panels.slice(0,4).forEach(p=>{const s=p.series[0],card=document.createElement('article');card.className='metric';
+      for(const [cls,value] of [['metric-label',p.title],['metric-value',s?.last||'—'],['metric-date',s?.asof?'Наблюдение · '+s.asof:'Нет данных источника']]){const el=document.createElement('div');el.className=cls;el.textContent=value;card.appendChild(el);}
+      const pts=(s?.data||[]).slice(-45).filter(v=>Number.isFinite(v.value??v.close));
+      if(pts.length>1){const values=pts.map(v=>v.value??v.close),lo=Math.min(...values),span=Math.max(...values)-lo||1;const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 72 32');svg.setAttribute('aria-hidden','true');const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',values.map((v,i)=>(i?'L':'M')+(i/(values.length-1)*72).toFixed(1)+','+(28-(v-lo)/span*24).toFixed(1)).join(' '));path.setAttribute('fill','none');path.setAttribute('stroke','#5bd8c0');path.setAttribute('stroke-width','1.5');svg.appendChild(path);card.appendChild(svg);}
+      metrics.appendChild(card);
+    });
+    const table=document.getElementById('monitor-body');table.replaceChildren();
+    panels.forEach(p=>p.series.forEach(s=>{const row=document.createElement('tr');const ready=!!s.data?.length;
+      [p.title,s.name,s.last||'—',s.asof||'—',!ready?'Нет данных':s.stale?'Проверьте свежесть':'Доступен'].forEach((value,i)=>{const td=document.createElement('td');if(i===0&&ready){const b=document.createElement('button');b.textContent=value;b.onclick=()=>{const idx=PANELS.findIndex(x=>x.id===p.id);if(idx>=0)openModal(idx);};td.appendChild(b);}else td.textContent=value;if(i===4)td.className=!ready||s.stale?'missing':'ok';row.appendChild(td);});table.appendChild(row);
+    }));
+    renderNav(document.getElementById('workspace-search').value);
+  }
+  const weeklyCache = new WeakMap();
+  function dataFor(sp) {
+    if(timeframe === 'D') return sp.data || [];
+    if(weeklyCache.has(sp)) return weeklyCache.get(sp);
+    const weeks = new Map();
+    for(const d of sp.data || []) {
+      const date=new Date(d.time+'T00:00:00Z');
+      date.setUTCDate(date.getUTCDate()-((date.getUTCDay()+6)%7));
+      const key=date.toISOString().slice(0,10), old=weeks.get(key);
+      if(sp.type === 'candles') {
+        if(!old) weeks.set(key,{...d,time:key});
+        else { old.high=Math.max(old.high,d.high);old.low=Math.min(old.low,d.low);old.close=d.close;old.volume+=d.volume; }
+      } else if(sp.type === 'volume') {
+        if(!old) weeks.set(key,{...d,time:key}); else old.value+=d.value;
+      } else weeks.set(key,{...d,time:key});
+    }
+    const out=[...weeks.values()];weeklyCache.set(sp,out);return out;
+  }
+  // Метка вместо булева флага. setVisibleRange не стреляет обработчиком
+  // синхронно — библиотека откладывает применение до requestAnimationFrame,
+  // и к моменту события флаг уже был сброшен. Из-за этого каждое движение
+  // мыши давало лавину встречных broadcast-ов, а панели с короткой историей
+  // утягивали за собой остальные.
+  let syncUntil = 0;
+  const holdSync = () => { syncUntil = performance.now() + 250; };
+  const isSyncing = () => performance.now() < syncUntil;
+
+  // Independent chart windows are the default, including browsers with an old md_sync=1.
+  let syncOn = false;
+  const panelRanges = new Map();
+  let pendingEntry = null;
+  function rememberRange(panel, range){
+    if(range) panelRanges.set(panel.id,{from:isoFrom(range.from),to:isoFrom(range.to)});
+  }
+  function restoreRanges(){
+    holdSync();
+    charts.forEach(o=>{try{o.chart.timeScale().setVisibleRange(panelRanges.get(o.panel.id)||currentRange);}catch(e){}});
+  }
+  document.getElementById("meta").textContent =
+    "обновлено " + DASH.generated + " · показ с " + DASH.displayStart;
+
+  const failed = (DASH.diagnostics || []).filter(d => d.status === "fail" || d.status === "skip");
+  const allSeries=[...new Map(PAGES.flatMap(p=>p.columns.flatMap(c=>c.panels.flatMap(p=>p.series))).map(s=>[s.name+'|'+s.asof,s])).values()];
+  const staleCount=allSeries.filter(s=>s.stale).length;
+  const emptyCount=allSeries.filter(s=>!s.data?.length).length;
+  const fallbackCount=(DASH.diagnostics||[]).filter(d=>d.status==='cache'&&/сеть упала|старый кэш|старого кэша/i.test(d.detail||'')).length;
+  document.getElementById('diag').textContent=[failed.length?'Не загрузилось: '+[...new Set(failed.map(d=>d.name))].join(', '):'Загрузка источников завершена',emptyCount?'Пустых рядов: '+emptyCount:'',staleCount?'Проверить свежесть: '+staleCount+' рядов':'',fallbackCount?'Резервный кэш после ошибки сети: '+fallbackCount:''].filter(Boolean).join(' · ');
+
+  // ---------------------------------------------------------------- формат чисел
+  // Единый формат для осей и подписей. Фиксированная точность не годится:
+  // у RRP исторический максимум 2554, а сейчас 0.7 — при точности 0 живое
+  // значение округлялось до нуля и выглядело как отсутствие данных.
+  function fmtNum(v) {
+    if (v === null || v === undefined || !isFinite(v)) return "";
+    const a = Math.abs(v);
+    if (a >= 10000) return v.toLocaleString("ru-RU", { maximumFractionDigits: 0 });
+    if (a >= 1000)  return v.toFixed(0);
+    if (a >= 100)   return v.toFixed(1);
+    if (a >= 1)     return v.toFixed(2);
+    if (a > 0)      return v.toFixed(3);
+    return "0";
+  }
+
+  const PRICE_FORMAT = { type: "custom", formatter: fmtNum, minMove: 0.001 };
+
+  // Самая свежая дата во всём наборе. Диапазоны считаем от неё, а не от
+  // "сегодня": часть рядов месячные и отстают, и на окне в неделю данные
+  // просто уехали бы за левый край экрана.
+  const LAST_DATE = (function () {
+    let mx = DASH.displayStart;
+    [...DASH.columns,...(DASH.markets?.columns || []),...(DASH.workspaces||[]).flatMap(w=>w.columns)].forEach(c => c.panels.forEach(p => p.series.forEach(s => {
+      if (s.data && s.data.length) {
+        const t = s.data[s.data.length - 1].time;
+        if (t > mx) mx = t;
+      }
+    })));
+    return mx;
+})();
+
+
+  function hexA(hex, a) {
+    const m = hex.replace("#", "");
+    const n = parseInt(m.length === 3 ? m.split("").map(x => x + x).join("") : m, 16);
+    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+  }
+
+  // ---------------------------------------------------------------- сборка графика
+  function baseOptions(big, panel, showTime) {
+    return {
+      autoSize: true,
+      layout: {
+        background: { type: "solid", color: "#101720" },
+        textColor: big ? "#9aa1ab" : "#767c86",
+        fontSize: big ? 11 : 10,
+        attributionLogo: false,
+      },
+      grid: {
+        vertLines: { color: big ? "#14181f" : "#101318" },
+        horzLines: { color: big ? "#14181f" : "#101318" },
+      },
+      rightPriceScale: {
+        borderColor: "#1b1e24",
+        scaleMargins: big ? { top: 0.08, bottom: 0.08 } : { top: 0.22, bottom: 0.12 },
+        entireTextOnly: !big,
+      },
+      leftPriceScale: {
+        visible: panel.series.some(s => s.scale === "left"),
+        borderColor: "#1b1e24",
+        scaleMargins: big ? { top: 0.08, bottom: 0.08 } : { top: 0.22, bottom: 0.12 },
+      },
+      timeScale: {
+        minBarSpacing: 0.01,
+        borderColor: "#1b1e24",
+        visible: true,
+        rightOffset: panel.profile ? 28 : (big ? 8 : 4),
+        lockVisibleTimeRangeOnResize: true,
+      },
+      crosshair: {
+        mode: LC.CrosshairMode.Normal,
+        vertLine: { color: "#4a5160", width: 1, style: 2, labelBackgroundColor: "#2a2e36" },
+        horzLine: { color: "#4a5160", width: 1, style: 2, labelBackgroundColor: "#2a2e36" },
+      },
+      handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: { time: true, price: true } },
+    };
+  }
+
+  function addSeries(chart, sp, panel, big) {
+    const common = {
+      priceScaleId: sp.scale === "left" ? "left" : "right",
+      lastValueVisible: true,
+      priceLineVisible: false,
+      priceFormat: PRICE_FORMAT,
+    };
+    const kind = sp.type || panel.type || "line";
+    const w = big ? 2 : 1;
+    const data = dataFor(sp);
+    let s;
+    if (kind === "candles") {
+      s=chart.addSeries(LC.CandlestickSeries,{...common,upColor:'#48bb85',downColor:'#e45e76',borderVisible:false,wickUpColor:'#48bb85',wickDownColor:'#e45e76'});
+      s.setData(data);
+    } else if (kind === "volume") {
+      s=chart.addSeries(LC.HistogramSeries,{...common,color:'#668bb0',priceFormat:{type:'volume'}});s.setData(data);
+    } else if (kind === "hist") {
+      const pos = sp.invert ? "rgba(239,83,80,.85)" : "rgba(38,166,154,.85)";
+      const neg = sp.invert ? "rgba(38,166,154,.85)" : "rgba(239,83,80,.85)";
+      s = chart.addSeries(LC.HistogramSeries, Object.assign({}, common, { color: sp.color }));
+      s.setData(data.map(d => ({ time: d.time, value: d.value, color: d.value >= 0 ? pos : neg })));
+    } else if (kind === "area") {
+      s = chart.addSeries(LC.AreaSeries, Object.assign({}, common, {
+        lineColor: sp.color, lineWidth: w,
+        topColor: hexA(sp.color, 0.28), bottomColor: hexA(sp.color, 0.02),
+      }));
+      s.setData(data);
+    } else if (kind === "baseline") {
+      s = chart.addSeries(LC.BaselineSeries, Object.assign({}, common, {
+        baseValue: { type: "price", price: 0 },
+        topLineColor: sp.color, topFillColor1: hexA(sp.color,.35),
+        topFillColor2: hexA(sp.color,.04),
+        bottomLineColor: "#ef5350", bottomFillColor1: "rgba(239,83,80,.02)",
+        bottomFillColor2: "rgba(239,83,80,.35)", lineWidth: w,
+      }));
+      s.setData(data);
+    } else {
+      s = chart.addSeries(LC.LineSeries, Object.assign({}, common, { color: sp.color, lineWidth: w, lineVisible:kind!=='scatter', pointMarkersVisible:kind==='scatter', pointMarkersRadius:2 }));
+      s.setData(data);
+    }
+    return s;
+  }
+
+  // ---------------------------------------------------------------- сетка панелей
+  const grid = document.getElementById("grid");
+
+  function renderColumns() {
+  holdSync();
+  charts.forEach(o=>{o.cleanup?.();o.chart.remove();});charts.length=0;PANELS.length=0;
+  grid.innerHTML='';grid.classList.toggle('markets',page===1);
+  updateWorkspace();
+  grid.style.gridTemplateColumns='repeat('+Math.min(3,Math.max(1,PAGES[page].columns.length)) +',minmax(0,1fr))';
+  PAGES[page].columns.forEach(col => {
+    const c = document.createElement("div");
+    c.className = "col";
+    const h = document.createElement("div");
+    h.className = "colhead";
+    h.textContent = col.title;
+    c.appendChild(h);
+
+    const body = document.createElement("div");
+    body.className = "colbody";
+    c.appendChild(body);
+
+    col.panels.forEach((panel, i) => {
+      const isLast = i === col.panels.length - 1;
+      const box = document.createElement("div");
+      box.className = "pane";
+      box.dataset.panelId = panel.id;
+      box.style.flex = `${(panel.height || 1) + (isLast ? 0.22 : 0)} 1 0`;
+
+      const cap = document.createElement("div");
+      cap.className = "cap";
+      const t = document.createElement("div");
+      t.className = "t";
+      t.textContent = panel.title;
+      t.style.background = panel.series[0] ? panel.series[0].color : "#888";
+      cap.appendChild(t);
+      if (panel.sub) {
+        const s = document.createElement("div");
+        s.className = "s";
+        s.textContent = panel.sub;
+        s.title = panel.sub;
+        cap.appendChild(s);
+      }
+      const readout = document.createElement("div");
+      readout.className = "v";
+      cap.appendChild(readout);
+      box.appendChild(cap);
+      body.appendChild(box);
+
+      const hasData = panel.series.some(s => s.data && s.data.length);
+      setReadout(readout, panel, null);
+      if (!hasData) { box.classList.add("empty"); return; }
+
+      const idx = PANELS.length;
+      PANELS.push(panel);
+
+      const btn = document.createElement("button");
+      btn.className = "expand";
+      btn.textContent = "⤢";
+      btn.title = "Развернуть";
+      btn.setAttribute('aria-label','Развернуть: '+panel.title);
+      btn.addEventListener("click", e => { e.stopPropagation(); openModal(idx); });
+      box.appendChild(btn);
+      box.addEventListener("dblclick", () => openModal(idx));
+
+      const plot=document.createElement("div");plot.className="plot";box.appendChild(plot);
+      const chart = LC.createChart(plot, baseOptions(false, panel, isLast));
+      const made = [];
+      panel.series.forEach(sp => {
+        if (!sp.data || !sp.data.length) return;
+        try {
+          made.push({ api: addSeries(chart, sp, panel, false), spec: sp });
+        } catch (e) {
+          console.error("не удалось построить ряд", panel.title, sp.name, e);
+        }
+      });
+
+      if (panel.zero && made[0]) {
+        made[0].api.createPriceLine({
+          price: 0, color: "#3a4049", lineWidth: 1, lineStyle: 2,
+          axisLabelVisible: false, title: "",
+        });
+      }
+
+      const entry = { chart, series: made, panel, readout };
+      entry.cleanup=decorate(chart,plot,panel,made);
+      charts.push(entry);
+
+      chart.timeScale().subscribeVisibleTimeRangeChange(r => {
+        if(!r)return;
+        box.dataset.visibleFrom=isoFrom(r.from);
+        box.dataset.visibleTo=isoFrom(r.to);
+        if (isSyncing()) return;
+        rememberRange(panel,r);
+        if (!syncOn) return;
+        currentRange = {from:isoFrom(r.from),to:isoFrom(r.to)};
+        holdSync();
+        charts.forEach(o => {
+          if (o.chart === chart) return;
+          rememberRange(o.panel,r);
+          try { o.chart.timeScale().setVisibleRange(r); } catch (e) {}
+        });
+      });
+
+      chart.subscribeCrosshairMove(param => {
+        pendingTime = param.time || null;
+        pendingEntry = entry;
+        if (rafId) return;                       // не чаще одного раза за кадр
+        rafId = requestAnimationFrame(() => {
+          rafId = 0;
+          const targets=syncOn?charts:(pendingEntry?[pendingEntry]:[]);
+          targets.forEach(o=>setReadout(o.readout,o.panel,pendingTime));
+        });
+      });
+    });
+
+    grid.appendChild(c);
+  });
+  if(PAGES[page].curve) renderCurve();
+  requestAnimationFrame(restoreRanges);
+  }
+
+  // ---------------------------------------------------------------- вспомогательное
+  // Легенда: имя и значение каждого ряда его собственным цветом.
+  // Без этого на панелях с несколькими линиями непонятно, где чья.
+  // time === null — показываем последние значения.
+  function setReadout(el, panel, time, withDate) {
+    el.textContent = "";
+    if (withDate && time != null) {
+      const d = document.createElement("span");
+      d.className = "legdate";
+      d.textContent = typeof time === "string" ? time : isoFrom(time);
+      el.appendChild(d);
+    }
+    panel.series.forEach(sp => {
+      let txt;
+      if (time == null) {
+        const last = dataFor(sp).at(-1);
+        txt = timeframe === 'W' && last ? fmtNum(last.value ?? last.close)+(sp.suffix||'') : sp.last;
+      } else {
+        const p = (sp.data && sp.data.length) ? nearest(dataFor(sp), time) : null;
+        txt = p ? fmtNum(p.value ?? p.close)+(sp.suffix||'') : "—";
+      }
+      // У baseline и histogram библиотека красит по знаку значения, а не в
+      // sp.color — маркер легенды должен показывать то, что нарисовано.
+      let col = sp.color;
+      const kind = sp.type || panel.type || "line";
+      if (kind === "baseline" || kind === "hist") {
+        const v = (time == null) ? sp.lastRaw
+                                 : (nearest(dataFor(sp), time) || {}).value;
+        if (v !== undefined && v !== null) {
+          const up = v >= 0;
+          col = (kind === "hist" && sp.invert) ? (up ? "#ef5350" : "#26a69a")
+                                               : (up ? sp.color : "#ef5350");
+        }
+      }
+      const item = document.createElement("span");
+      item.className = "leg";
+      item.style.color = col;
+      const dot = document.createElement("i");
+      dot.style.background = col;
+      item.appendChild(dot);
+      item.appendChild(document.createTextNode(sp.name + " " + txt));
+      // Ряд протянут вперёд, чтобы панели совпадали по времени. Если настоящее
+      // наблюдение сильно старше остальных — говорим об этом, а не выдаём
+      // протянутое значение за сегодняшнее.
+      if (sp.stale && sp.asof) {
+        const a = document.createElement("span");
+        a.className = "legdate";
+        a.style.marginLeft = "4px";
+        a.textContent = "(на " + sp.asof + ")";
+        item.appendChild(a);
+      }
+      el.appendChild(item);
+    });
+  }
+
+  function nearest(data, time) {
+    if (!data || !data.length) return null;
+    const key = typeof time === "string" ? time : isoFrom(time);
+    let lo = 0, hi = data.length - 1, best = null;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (data[mid].time === key) return data[mid];
+      if (data[mid].time < key) { best = data[mid]; lo = mid + 1; } else hi = mid - 1;
+    }
+    return best;
+  }
+
+  function isoFrom(t) {
+    if (typeof t === "string") return t;          // библиотека отдаёт и строки тоже
+    if (t && typeof t === "object" && "year" in t) {
+      return `${t.year}-${String(t.month).padStart(2, "0")}-${String(t.day).padStart(2, "0")}`;
+    }
+    return new Date(t * 1000).toISOString().slice(0, 10);
+  }
+
+  function iso(d) { return d.toISOString().slice(0, 10); }
+
+  function rangeFor(days) {
+    const to = new Date(LAST_DATE + "T00:00:00Z");
+    const from = days
+      ? new Date(to.getTime() - days * 86400000)
+      : new Date(DASH.displayStart + "T00:00:00Z");
+    return { from: iso(from), to: iso(to) };
+  }
+
+  // ---------------------------------------------------------------- диапазон
+  let currentRange = rangeFor(1825);
+
+  function applyRange(r) {
+    currentRange = r;
+    holdSync();
+    panelRanges.clear();
+    charts.forEach(o => { rememberRange(o.panel,r);try { o.chart.timeScale().setVisibleRange(r); } catch (e) {} });
+  }
+
+  const syncBtn = document.getElementById("syncbtn");
+  syncBtn.classList.toggle("on", syncOn);
+
+  document.getElementById("rangebar").addEventListener("click", e => {
+    const b = e.target.closest("button");
+    if (!b) return;
+
+    if (b.id === "syncbtn") {                 // переключатель, не диапазон
+      syncOn = !syncOn;
+      syncBtn.classList.toggle("on", syncOn);
+      syncBtn.setAttribute('aria-pressed',String(syncOn));
+      syncBtn.textContent=syncOn?'⇄ Связаны':'⇄ Связать';
+      if (syncOn) applyRange(currentRange);   // снова сводим панели к одному отрезку
+      return;
+    }
+
+    document.querySelectorAll("#rangebar button[data-d]").forEach(x => x.classList.remove("on"));
+    b.classList.add("on");
+    applyRange(rangeFor(Number(b.dataset.d)));   // кнопки диапазона глобальны всегда
+  });
+
+  setTimeout(() => {renderColumns();applyRange(currentRange);}, 60);
+
+  // ---------------------------------------------------------------- развёрнутый график
+  const modal = document.getElementById("modal");
+  const mchart = document.getElementById("mchart");
+  const mtitle = document.getElementById("mtitle");
+  const msub = document.getElementById("msub");
+  const mval = document.getElementById("mval");
+  const mfoot = document.getElementById("mfoot");
+  let m = null;              // {chart, series[], panel, idx, log}
+
+  function openModal(idx) {
+    closeModal();
+    const panel = PANELS[idx];
+    if (!panel) return;
+
+    mtitle.textContent = panel.title;
+    mtitle.style.background = panel.series[0] ? panel.series[0].color : "#888";
+    msub.textContent = panel.sub || "";
+    setReadout(mval, panel, null, true);
+    modal.classList.add("open");
+
+    const plot=document.createElement("div");plot.className="plot";mchart.appendChild(plot);
+    const chart = LC.createChart(plot, baseOptions(true, panel, true));
+    const made = [];
+    panel.series.forEach(sp => {
+      if (!sp.data || !sp.data.length) return;
+      try {
+        made.push({ api: addSeries(chart, sp, panel, true), spec: sp });
+      } catch (e) {
+        console.error("не удалось построить ряд", panel.title, sp.name, e);
+      }
+    });
+    if (panel.zero && made[0]) {
+      made[0].api.createPriceLine({
+        price: 0, color: "#4a5160", lineWidth: 1, lineStyle: 2,
+        axisLabelVisible: true, title: "",
+      });
+    }
+
+    const spans = made.map(ms => {
+      const d = ms.spec.data;
+      return `${ms.spec.name}: ${d.length} точек, ${d[0].time} … ${d[d.length - 1].time}`;
+    });
+    mfoot.textContent = spans.join("    ·    ")
+      + "        Esc — закрыть · ← → — соседние панели · колесо — зум";
+
+    chart.subscribeCrosshairMove(param => {
+      setReadout(mval, panel, param.time || null, true);
+    });
+
+    m = { chart, series: made, panel, idx, log: false, cleanup:decorate(chart,plot,panel,made) };
+    document.getElementById("mlog").classList.remove("on");
+    try { chart.timeScale().setVisibleRange(panelRanges.get(panel.id)||currentRange); } catch (e) {}
+    markModalRange(null);
+  }
+
+  function closeModal() {
+    if (m) {
+      const range=m.chart.timeScale().getVisibleRange();
+      if(range){rememberRange(m.panel,range);holdSync();const embedded=charts.find(o=>o.panel.id===m.panel.id);try{embedded?.chart.timeScale().setVisibleRange(range);}catch(e){}}
+      try { m.cleanup?.();m.chart.remove(); } catch (e) {} m = null;
+    }
+    modal.classList.remove("open");
+    mchart.innerHTML = "";
+  }
+
+  function markModalRange(years) {
+    document.querySelectorAll("#modal button[data-my]").forEach(b => {
+      b.classList.toggle("on", years !== null && Number(b.dataset.my) === years);
+    });
+  }
+
+  modal.addEventListener("click", e => {
+    const b = e.target.closest("button");
+    if (!b || !m) return;
+    if (b.id === "mclose") return closeModal();
+    if (b.id === "mprev") return openModal((m.idx - 1 + PANELS.length) % PANELS.length);
+    if (b.id === "mnext") return openModal((m.idx + 1) % PANELS.length);
+    if(b.id==='mzoom-in') return zoom(m.chart,.7);
+    if(b.id==='mzoom-out') return zoom(m.chart,1.4);
+    if(b.id==='mreset'){markModalRange(1825);return m.chart.timeScale().setVisibleRange(rangeFor(1825));}
+    if (b.id === "mlog") {
+      m.log = !m.log;
+      b.classList.toggle("on", m.log);
+      const mode = m.log ? LC.PriceScaleMode.Logarithmic : LC.PriceScaleMode.Normal;
+      try { m.chart.priceScale("right").applyOptions({ mode }); } catch (e) {}
+      try { m.chart.priceScale("left").applyOptions({ mode }); } catch (e) {}
+      m.cleanup?.redraw?.();
+      return;
+    }
+    if (b.dataset.my !== undefined) {
+      const y = Number(b.dataset.my);
+      markModalRange(y);
+      try { m.chart.timeScale().setVisibleRange(rangeFor(y)); } catch (e) {}
+    }
+  });
+
+  // клик мимо графика закрывает
+  modal.addEventListener("mousedown", e => {
+    if (e.target === modal) closeModal();
+  });
+
+  document.addEventListener("keydown", e => {
+    if(e.target.matches("input,textarea,select"))return;
+    if(e.key==='Escape'){const full=document.querySelector('.curve-wrap.fullscreen');if(full){full.classList.remove('fullscreen');full.querySelector('.curve-expand').textContent='⤢ Развернуть';return;}}
+    if (!m) {
+      if(e.key==='ArrowRight' || e.key==='ArrowLeft') {navigate((page+(e.key==='ArrowRight'?1:-1)+PAGES.length)%PAGES.length);e.preventDefault();}
+      return;
+    }
+    if (e.key === "Escape") { closeModal(); e.preventDefault(); }
+    else if (e.key === "ArrowLeft") { openModal((m.idx - 1 + PANELS.length) % PANELS.length); e.preventDefault(); }
+    else if (e.key === "ArrowRight") { openModal((m.idx + 1) % PANELS.length); e.preventDefault(); }
+  });
+  function zoom(chart,factor){
+    const r=chart.timeScale().getVisibleLogicalRange();if(!r)return;
+    const mid=(r.from+r.to)/2,span=Math.max(4,(r.to-r.from)*factor);
+    chart.timeScale().setVisibleLogicalRange({from:mid-span/2,to:mid+span/2});
+  }
+  for(const id of ['page-prev','page-next']) document.getElementById(id).onclick=()=>{navigate((page+1)%PAGES.length);};
+  function zoomAll(factor){
+    const lo=Date.parse(currentRange.from),hi=Date.parse(currentRange.to),mid=(lo+hi)/2;
+    const span=Math.max(7*86400000,(hi-lo)*factor);
+    applyRange({from:iso(new Date(mid-span/2)),to:iso(new Date(mid+span/2))});
+    document.querySelectorAll('#rangebar [data-d]').forEach(b=>b.classList.remove('on'));
+  }
+  document.getElementById('zoom-in').onclick=()=>zoomAll(.7);
+  document.getElementById('zoom-out').onclick=()=>zoomAll(1.4);
+  document.getElementById('reset-view').onclick=()=>{applyRange(rangeFor(1825));document.querySelectorAll('#rangebar [data-d]').forEach(b=>b.classList.toggle('on',b.dataset.d==='1825'));};
+  document.querySelectorAll('[data-tf]').forEach(b=>b.onclick=()=>{
+    if(timeframe===b.dataset.tf)return;
+    const oldIdx=m?.idx, oldRange=m?.chart.timeScale().getVisibleRange();
+    timeframe=b.dataset.tf;
+    document.querySelectorAll('[data-tf]').forEach(x=>x.classList.toggle('on',x.dataset.tf===timeframe));
+    closeModal();renderColumns();
+    if(oldIdx!==undefined){openModal(oldIdx);if(oldRange)m.chart.timeScale().setVisibleRange(oldRange);}
+  });
+
+  // An overlay shares the chart's real price/time transforms, including log scale.
+  // Volume is distributed uniformly across each daily bar's high-low range.
+  function decorate(chart,host,panel,made){
+    if(made[0]) for(const level of panel.levels || []) made[0].api.createPriceLine({price:level,color:'#b19c63',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:String(level)});
+    if(!panel.profile && !panel.zones)return ()=>{};
+    const canvas=document.createElement('canvas');canvas.className='overlay';host.appendChild(canvas);
+    let scheduled=0,dead=false;
+    function schedule(){if(!scheduled && !dead)scheduled=requestAnimationFrame(()=>{scheduled=0;try{draw();}catch(e){console.error("overlay",e.message,e.stack);}});}
+    function draw(){
+      if(dead || !host.clientWidth || !host.clientHeight || !made[0])return;
+      const w=host.clientWidth,h=host.clientHeight,dpr=devicePixelRatio || 1;
+      canvas.width=w*dpr;canvas.height=h*dpr;canvas.style.width=w+'px';canvas.style.height=h+'px';
+      const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);
+      const range=chart.timeScale().getVisibleRange();if(!range)return;
+      const from=isoFrom(range.from),to=isoFrom(range.to),api=made[0].api;
+      const pw=chart.paneSize().width,ph=chart.paneSize().height;
+      ctx.save();ctx.beginPath();ctx.rect(0,0,pw,ph);ctx.clip();
+      const coord=t=>chart.timeScale().timeToCoordinate(t);
+      if(panel.zones){
+        // Time interpolation handles monthly observations absent from the trading calendar.
+        const trade=made[0].spec.data;
+        const xFor=t=>{const p=nearest(trade,t);return p ? coord(p.time) : null;};
+        for(let i=0;i<panel.zones.length;i++){
+          const z=panel.zones[i],next=panel.zones[i+1];if(z.value<.5 || z.time>to || (next && next.time<from))continue;
+          const x=z.time<=from ? 0 : xFor(z.time), x2=!next || next.time>=to ? pw : xFor(next.time);
+          if(x!==null && x2!==null){ctx.fillStyle='rgba(150,22,48,.17)';ctx.fillRect(x,0,Math.max(1,x2-x),ph);}
+        }
+      }
+      if(panel.band){
+        const a=dataFor({data:panel.band.fast}),b=dataFor({data:panel.band.slow});
+        ctx.fillStyle='rgba(31,163,56,.24)';ctx.beginPath();let started=false;
+        for(const p of a){const x=coord(p.time),y=api.priceToCoordinate(p.value);if(x===null || y===null)continue;if(!started){ctx.moveTo(x,y);started=true;}else ctx.lineTo(x,y);}
+        for(let i=b.length-1;i>=0;i--){const x=coord(b[i].time),y=api.priceToCoordinate(b[i].value);if(x!==null && y!==null)ctx.lineTo(x,y);}
+        ctx.closePath();ctx.fill();
+      }
+      if(panel.profile){
+        // Always use daily bars, so changing candle interval does not alter the profile.
+        const end=timeframe==='W' ? iso(new Date(Date.parse(to)+6*86400000)) : to;
+        const bars=panel.series[0].data.filter(d=>d.time>=from && d.time<=end && d.volume>0);
+        if(bars.length){
+          const low=Math.min(...bars.map(d=>d.low)),high=Math.max(...bars.map(d=>d.high));
+          const n=64,step=(high-low || 1)/n,bins=Array.from({length:n},()=>({up:0,down:0}));
+          for(const b of bars){
+            const first=Math.max(0,Math.min(n-1,Math.floor((b.low-low)/step))),last=Math.max(first,Math.min(n-1,Math.floor((b.high-low)/step)));
+            for(let i=first;i<=last;i++){
+              const frac=b.high===b.low ? 1 : Math.max(0,Math.min(b.high,low+(i+1)*step)-Math.max(b.low,low+i*step))/(b.high-b.low);
+              bins[i][b.close>=b.open?'up':'down']+=b.volume*frac;
+            }
+          }
+          const totals=bins.map(b=>b.up+b.down),max=Math.max(...totals),poc=totals.indexOf(max);
+          const target=totals.reduce((a,b)=>a+b,0)*.7;let sum=totals[poc],left=poc,right=poc;
+          while(sum<target && (left>0 || right<n-1)){
+            if(right<n-1 && (left===0 || totals[right+1]>=totals[left-1]))sum+=totals[++right];else sum+=totals[--left];
+          }
+          const width=Math.min(130,pw*.24),edge=pw-3;
+          ctx.fillStyle='rgba(3,7,12,.30)';ctx.fillRect(edge-width-9,0,width+12,ph);
+          bins.forEach((b,i)=>{
+            const y1=api.priceToCoordinate(low+i*step),y2=api.priceToCoordinate(low+(i+1)*step);if(y1===null || y2===null)return;
+            const up=b.up/max*width,down=b.down/max*width,y=Math.min(y1,y2),bh=Math.max(1,Math.abs(y1-y2)-.4),va=i>=left && i<=right;
+            ctx.fillStyle=va?'#b89db5':'#a38a38';ctx.fillRect(edge-down,y,down,bh);
+            ctx.fillStyle=va?'#85adbe':'#147287';ctx.fillRect(edge-down-up,y,up,bh);
+          });
+          const yp=api.priceToCoordinate(low+(poc+.5)*step);
+          ctx.strokeStyle='#e2bd68';ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(edge-width,yp);ctx.lineTo(edge,yp);ctx.stroke();ctx.setLineDash([]);
+          ctx.font='10px Segoe UI';ctx.fillStyle='#e2bd68';ctx.fillText('POC '+fmtNum(low+(poc+.5)*step),edge-width,Math.max(70,yp-5));
+          ctx.fillStyle='#a6afbd';ctx.fillText('VP · оценка',edge-width,ph-8);
+        }
+      }
+      ctx.restore();
+    }
+    const ro=new ResizeObserver(schedule);ro.observe(host);
+    chart.timeScale().subscribeVisibleTimeRangeChange(schedule);
+    chart.timeScale().subscribeVisibleLogicalRangeChange(schedule);
+    chart.subscribeCrosshairMove(schedule);
+    host.addEventListener('wheel',schedule,{passive:true});host.addEventListener('pointermove',schedule);
+    schedule();
+    const cleanup=()=>{dead=true;cancelAnimationFrame(scheduled);ro.disconnect();host.removeEventListener('wheel',schedule);host.removeEventListener('pointermove',schedule);canvas.remove();};
+    cleanup.redraw=schedule;return cleanup;
+  }
+
+  function renderCurve(){
+    const wrap=document.createElement('section');wrap.className='curve-wrap';grid.appendChild(wrap);
+    wrap.innerHTML='<h2>КРИВАЯ ДОХОДНОСТИ США</h2><p>Сейчас · неделю назад · месяц назад<br>Доходности казначейских облигаций, %</p><div class="curve-controls"></div><svg class="curve-svg" viewBox="0 0 470 310" role="img" aria-label="Кривая доходности США"></svg><div class="curve-tip">Наведите на точку, чтобы увидеть срок и дату наблюдения.</div><table class="curve-table"></table><div class="legend-box"><h2>GOLD · ПОЗИЦИИ MANAGED MONEY</h2><table class="curve-table cot-table"></table></div><details class="legend-box"><summary>Формулы и источники</summary><p>Профиль объёма: дневной объём равномерно распределён между Low и High. Цвета отражают направление дневной свечи, а не сделки покупателя/продавца. POC — максимальный узел; светлая зона содержит 70% объёма. Это оценка без внутридневной ленты.</p><p>Зелёная лента — EMA 50/200 дневных закрытий. RSI — сглаживание Wilder, 14 дневных наблюдений. System Stress — процентиль VIX за 252 наблюдения. Авторские COR1M, Stress Impulse и прогнозные дуги на скриншотах не воспроизводятся без исходных формул.</p><p>COT: Gold 088691, Futures Only. Flow — z-score недельных изменений за 52 отчёта; индексы Long, Short, Net и OI нормированы в −100…100 за 156 недель. Данные COT относятся ко вторнику и публикуются позднее; это не сигналы, доступные в тот же день.</p><p>Недельный интервал агрегирует OHLC и суммирует объём. Для макрорядов и дневных индикаторов берётся последнее наблюдение недели. COT сохраняет недельную частоту. GC=F — непрерывный фьючерсный ряд с переходами контрактов.</p><p><a class="source-link" href="https://www.cftc.gov/MarketReports/CommitmentsofTraders/index.htm" target="_blank" rel="noopener">CFTC · COT</a> · <a class="source-link" href="https://fred.stlouisfed.org/categories/115" target="_blank" rel="noopener">FRED · US Treasury</a> · <a class="source-link" href="https://finance.yahoo.com/quote/SPY/" target="_blank" rel="noopener">Yahoo Finance · OHLCV</a></p></details>';
+    const expand=document.createElement('button');expand.className='curve-expand';expand.textContent='⤢ Развернуть';expand.onclick=()=>{const full=wrap.classList.toggle('fullscreen');expand.textContent=full?'✕ Свернуть':'⤢ Развернуть';};wrap.prepend(expand);
+    const curves=DASH.markets?.curves || [],visible=curves.map(()=>true);
+    const svg=wrap.querySelector('svg'),table=wrap.querySelector('table'),tip=wrap.querySelector('.curve-tip');
+    curves.forEach((c,i)=>{const b=document.createElement('button');b.textContent=c.name;b.className='on';b.style.color=c.color;b.onclick=()=>{visible[i]=!visible[i];b.classList.toggle('on',visible[i]);draw();};wrap.querySelector('.curve-controls').appendChild(b);});
+    function elem(tag,attrs,parent=svg){const e=document.createElementNS('http://www.w3.org/2000/svg',tag);Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,v));parent.appendChild(e);return e;}
+    function draw(){
+      svg.replaceChildren();table.replaceChildren();
+      const vals=curves.flatMap((c,i)=>visible[i]?c.values.map(v=>v.value).filter(v=>v!==null):[]);
+      if(!vals.length){elem('text',{x:35,y:140,fill:'#8d98a7'}).textContent='Нет выбранных данных';return;}
+      let low=Math.floor((Math.min(...vals)-.1)*5)/5,high=Math.ceil((Math.max(...vals)+.1)*5)/5;
+      const x=i=>42+i*39,y=v=>258-(v-low)/(high-low)*224;
+      for(let i=0;i<=4;i++){const v=low+(high-low)*i/4,yy=y(v);elem('line',{x1:42,x2:440,y1:yy,y2:yy,stroke:'#202834'});elem('text',{x:1,y:yy+4,fill:'#8190a4','font-size':11}).textContent=v.toFixed(2)+'%';}
+      curves[0].values.forEach((v,i)=>{elem('text',{x:x(i),y:284,fill:'#8e9aab','font-size':10,'text-anchor':'middle'}).textContent=v.tenor;});
+      curves.forEach((c,j)=>{if(!visible[j])return;let path='',active=false;
+        c.values.forEach((v,i)=>{if(v.value===null){active=false;return;}path+=(active?'L':'M')+x(i)+','+y(v.value)+' ';active=true;});
+        elem('path',{d:path,fill:'none',stroke:c.color,'stroke-width':2});
+        c.values.forEach((v,i)=>{if(v.value===null)return;const dot=elem('circle',{cx:x(i),cy:y(v.value),r:4,fill:c.color,tabindex:0});
+          const label=c.name+' · '+v.tenor+' · '+v.value.toFixed(3)+'% · '+v.asof;
+          elem('title',{},dot).textContent=label;dot.onmouseenter=dot.onfocus=()=>{tip.textContent=label;};});
+      });
+      const head=document.createElement('tr');['Срок',...curves.filter((_,j)=>visible[j]).map(c=>c.name)].forEach(v=>{const th=document.createElement('th');th.textContent=v;head.appendChild(th);});table.appendChild(head);
+      curves[0].values.forEach((v,i)=>{const tr=document.createElement('tr');const first=document.createElement('td');first.textContent=v.tenor;tr.appendChild(first);curves.forEach((c,j)=>{if(!visible[j])return;const td=document.createElement('td');td.style.color=c.color;td.textContent=c.values[i].value===null?'—':c.values[i].value.toFixed(3)+'%';td.title=c.values[i].asof || 'Нет данных';tr.appendChild(td);});table.appendChild(tr);});
+      const dates=document.createElement('caption');dates.style.cssText='caption-side:bottom;text-align:left;color:#748297;padding-top:8px';dates.textContent=curves.map(c=>c.name+': '+c.date).join(' · ');table.appendChild(dates);
+    }
+    draw();
+    const ct=wrap.querySelector('.cot-table');
+    const hr=document.createElement('tr');['Позиция','Контракты','Δ неделя'].forEach(t=>{const th=document.createElement('th');th.textContent=t;hr.appendChild(th);});ct.appendChild(hr);
+    for(const r of DASH.markets?.cot || []){const tr=document.createElement('tr');[r.name,r.value===null?'Нет данных':fmtNum(r.value),r.change===null?'—':fmtNum(r.change)].forEach(t=>{const td=document.createElement('td');td.textContent=t;tr.appendChild(td);});ct.appendChild(tr);}
+    const stamp=document.createElement('p');stamp.textContent='Дата отчёта: '+(DASH.markets?.cot?.[0]?.asof || 'нет данных');ct.after(stamp);
+  }
+
+})();
+</script>
+</body>
+</html>

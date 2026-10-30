@@ -1,0 +1,20 @@
+fred_key.txt
+.env
+.env.*
+!.env.example
+*.log
+__pycache__/
+*.pyc
+backups/
+data/raw/
+data/manual/
+data_selftest/
+publish-github/
+Claude outputs/
+dashboard.html
+dashboard_selftest.html
+data/dashboard.json
+data/previous-dashboard.json
+*.png
+*.csv
+explore_report.txt
