@@ -24,6 +24,7 @@ import sources              # noqa: E402
 import derive               # noqa: E402
 import market               # noqa: E402
 import catalogue            # noqa: E402
+import history              # noqa: E402
 
 ROOT = HERE.parent
 TEMPLATE = ROOT / "web" / "index.html"
@@ -183,6 +184,14 @@ def main() -> int:
         "diagnostics": sources.DIAG,
     }
 
+    previous = None
+    if OUT_JSON.exists():
+        try:
+            previous = json.loads(OUT_JSON.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            pass
+    history.annotate(payload, raw)
+    payload['changes'] = history.snapshot_change(previous, payload)
     OUT_JSON.parent.mkdir(parents=True, exist_ok=True)
     OUT_JSON.write_text(json.dumps(payload, ensure_ascii=False, allow_nan=False), encoding="utf-8")
 
@@ -194,6 +203,7 @@ def main() -> int:
     if not lib:
         print("  ! нет web/vendor/lightweight-charts.js — страница подтянет библиотеку из интернета")
     html = html.replace("/*__LIB__*/", lib)
+    html = html.replace("/*__RESEARCH__*/", (ROOT / "web" / "research.js").read_text(encoding="utf-8"))
     # Тексты ошибок содержат данные с чужих серверов. Если там окажется "</script>",
     # тег закроется раньше времени и страница развалится целиком.
     blob = json.dumps(payload, ensure_ascii=False, allow_nan=False).replace("</", "<\\/")

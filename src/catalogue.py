@@ -7,6 +7,9 @@ import sources
 FRED = {
  'CRDQUSAPABIS':'BIS US private credit', 'CRDQXMAPABIS':'BIS euro area private credit',
  'CRDQJPAPABIS':'BIS Japan private credit', 'CRDQCNAPABIS':'BIS China private credit',
+ 'PCEC96':'Real consumption', 'DSPIC96':'Real disposable personal income', 'PSAVERT':'Personal saving rate',
+ 'DRCCLACBS':'Credit card delinquency', 'JTSJOL':'Job openings', 'CIVPART':'Labor participation',
+ 'SOFR':'Secured overnight financing rate', 'IORB':'Interest on reserve balances',
  'CPILFESL':'Core CPI', 'PCEPI':'PCE price index', 'PCEPILFE':'Core PCE',
  'GDP':'Nominal GDP', 'GDPC1':'Real GDP', 'A191RL1Q225SBEA':'Real GDP growth, annualized',
  'GFDEBTN':'Federal debt', 'GFDEGDQ188S':'Federal debt / GDP',
@@ -60,11 +63,15 @@ def build(raw, columns, markets):
     g=lambda k:raw.get(k,pd.Series(dtype=float))
     existing={p['id']:p for c in columns+markets['columns'] for p in c['panels']}
     def p(pid,title,sid,unit='',factor=1):
-        return D._p(pid,title,[D._s(sid,g(sid)*factor,COLORS[0],suffix=" "+unit if unit else "",stamp=D.asof(g(sid)))],sub=f'{sid} · {unit} · наблюдения источника',suffix=unit)
+        panel=D._p(pid,title,[D._s(sid,g(sid)*factor,COLORS[0],suffix=" "+unit if unit else "",stamp=D.asof(g(sid)))],sub=f'{sid} · {unit} · наблюдения источника',suffix=unit)
+        panel['source_ids']=[sid]
+        return panel
     def transformed(pid,title,sid,periods,kind='yoy'):
         a=g(sid).dropna()
         a=calendar_change(a,months=3 if kind=='annual3' else 12,weekly=periods==52,annualize=kind=='annual3')
-        return D._p(pid,title,[D._s(sid,a,COLORS[1],suffix="%",stamp=D.asof(g(sid)))],zero=True,sub=f'{sid} · % · '+('3м, в годовом выражении' if kind=='annual3' else f'изменение за {periods} наблюдений'))
+        panel=D._p(pid,title,[D._s(sid,a,COLORS[1],suffix="%",stamp=D.asof(g(sid)))],zero=True,sub=f'{sid} · % · '+('3м, в годовом выражении' if kind=='annual3' else f'изменение за {periods} наблюдений'))
+        panel['source_ids']=[sid]
+        return panel
     result=[]
     def section(key,family,title,panels,note='',curve=False):
         result.append(dict(id=key,family=family,title=title,note=note,curve=curve,
@@ -88,6 +95,21 @@ def build(raw, columns, markets):
     section('debt','MACRO / USA','Государственный долг',[p('debt-level','Федеральный долг США','GFDEBTN','трлн $',.000001),p('debt-gdp','Федеральный долг / ВВП','GFDEGDQ188S','%')])
     section('conditions','MACRO / USA','Финансовые условия',old('nfci','stress','risk','vix','move'))
     section('labor','MACRO / USA','Рынок труда и заявки',[p('unemployment','Безработица','UNRATE','%'),p('payrolls','Nonfarm payrolls','PAYEMS','млн',.001),p('claims','Первичные заявки','ICSA','тыс.',.001),p('continuing','Повторные заявки','CCSA','млн',.000001)]+old('sahm'))
+    section('consumer','MACRO / USA','Потребитель США',[p('consumption','Реальные расходы потребителей','PCEC96','трлн $ 2017',.001),transformed('consumption-yoy','Реальные расходы · YoY','PCEC96',12),p('realincome','Реальный располагаемый доход','DSPIC96','трлн $ 2017',.001),p('saving','Норма сбережений','PSAVERT','%'),p('carddelinq','Просрочки по кредитным картам','DRCCLACBS','%')], 'BEA: расходы и располагаемый доход в постоянных ценах, SAAR. Просрочки банков — квартальная статистика ФРС; это не текущая доля просрочки всех потребителей.')
+    section('labor-detail','MACRO / USA','Найм и участие в труде',[p('jolts','Вакансии · JOLTS','JTSJOL','млн',.001),p('participation','Участие в рабочей силе','CIVPART','%'),D._p('payroll-change','Занятость · изменение за месяц',[D._s('PAYEMS Δ',g('PAYEMS').diff(),'#90aaff',suffix=' тыс.',stamp=D.asof(g('PAYEMS')))],sub='PAYEMS · изменение за одно месячное наблюдение, тыс. человек')])
+    payroll=g('PAYEMS').dropna()
+    if len(payroll):
+        payroll_months=payroll.index.to_period('M')
+        payroll_base=pd.Series(payroll.to_numpy(),index=payroll_months).groupby(level=0).last().reindex(payroll_months-1).to_numpy()
+        payroll_change=payroll-pd.Series(payroll_base,index=payroll.index)
+    else:
+        payroll_change=payroll
+    for workspace in result:
+        if workspace['id']=='labor-detail':
+            workspace['columns'][-1]['panels'][-1]['series']=[D._s('PAYEMS Δ',payroll_change,'#90aaff',suffix=' тыс.',stamp=D.asof(payroll))]
+    repo=pd.concat([g('SOFR'),g('IORB')],axis=1).dropna()
+    spread=repo.iloc[:,0]-repo.iloc[:,1] if not repo.empty else pd.Series(dtype=float)
+    section('funding','BONDS','Денежный рынок',[p('sofr','SOFR','SOFR','%'),p('iorb','Ставка на резервные остатки','IORB','%'),D._p('sofr-iorb','SOFR − IORB',[D._s('Спред',spread*100,'#e8c47a',suffix=' б.п.')],zero=True,sub='Разность ставок на общих датах наблюдений, базисные пункты')], 'Ставки денежного рынка и резервных остатков. Спред выражен в базисных пунктах; интерпретация зависит от режима денежного рынка.')
     section('housing','MACRO / USA','Жильё и строительство',old('exhs','permit','cs','spxhgx')+[p('starts','Начатое строительство','HOUST','тыс. SAAR'),p('mortgage','Ипотека 30 лет','MORTGAGE30US','%')])
     section('forex','FOREX','Валюты',old('dxy')+[p('fx-'+k,t,k,u) for k,t,u in [('DEXUSEU','EUR / USD','USD за EUR'),('DEXUSUK','GBP / USD','USD за GBP'),('DEXJPUS','USD / JPY','JPY за USD'),('DEXCHUS','USD / CNY','CNY за USD')]])
     section('crypto','CRYPTO','Криптовалюты',[p('btc','Bitcoin / USD','BTC','$'),p('eth','Ethereum / USD','ETH','$')])
@@ -101,4 +123,5 @@ def build(raw, columns, markets):
     section('usindices','EQUITIES','Индексы США',old('spy')+[p('us-'+k,t,k,'USD') for k,t in [('QQQ','Nasdaq 100 · QQQ'),('IWM','Russell 2000 · IWM'),('DIA','Dow Jones · DIA')]])
     section('sectors','EQUITIES','Секторы США',[p('sector-'+k,t+' · '+k,k,'USD') for k,t in [('XLK','Technology'),('XLF','Financials'),('XLE','Energy'),('XLV','Health Care'),('XLI','Industrials'),('XLP','Consumer Staples'),('XLY','Consumer Discretionary'),('XLU','Utilities'),('XLB','Materials'),('XLRE','Real Estate'),('XLC','Communication'),('SOXX','Semiconductors')]])
     section('earnings','EQUITIES','Корпоративные прибыли',[p('profits','Прибыль компаний США после налогов','CP','млрд $'),transformed('profits-yoy','Прибыль компаний · YoY','CP',4)],'BEA / FRED: прибыль всех американских корпораций после налогов, SAAR. Это не EPS индекса S&P 500.')
-    return result
+    order=['MACRO / WORLD','MACRO / USA','FOREX','CRYPTO','COMMODITY','BONDS','EQUITIES']
+    return sorted(result,key=lambda w:order.index(w['family']))

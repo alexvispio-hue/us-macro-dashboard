@@ -7,8 +7,8 @@ assert.ok(start>0&&end>start);
 const handlerSource=html.slice(start,end);
 const ctx=vm.createContext({});
 vm.runInContext(`
-let syncOn=false, blocked=false, currentRange={from:'2021-01-01',to:'2026-01-01'},handler;
-const panel={id:'source'},box={dataset:{}},stored=new Map();
+let syncOn=false, groupSyncOn=false, blocked=false, currentRange={from:'2021-01-01',to:'2026-01-01'},handler;
+const panel={id:'source'},box={dataset:{}},stored=new Map(),linkedIds=new Set();
 const isoFrom=t=>t;
 const isSyncing=()=>blocked;
 const holdSync=()=>{blocked=true;};
@@ -28,6 +28,9 @@ assert.equal(read('calls.length'),2,'Explicitly linked charts must follow the so
 assert.equal(read('currentRange.from'),'2024-01-01');
 vm.runInContext("calls.length=0;handler({from:'2020-01-01',to:'2025-01-01'})",ctx);
 assert.deepEqual(read('calls'),[],'Programmatic range events must not cause a feedback loop');
+vm.runInContext("syncOn=false;groupSyncOn=true;blocked=false;linkedIds.add('source');linkedIds.add('a');handler({from:'2024-01-01',to:'2025-01-01'})",ctx);
+assert.equal(read('calls.length'),1,'Only marked peers may follow a selected group');
+assert.equal(read('calls[0].id'),'a');
 assert.match(html,/let syncOn = false/);
 assert.doesNotMatch(html,/localStorage.getItem\("md_sync"\)/,'A saved old preference must not restore the reported bug');
 console.log('OK: independent scroll, explicit linking, global preset isolation, feedback suppression');

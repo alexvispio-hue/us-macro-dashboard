@@ -1,0 +1,31 @@
+{
+  "generated": "2026-10-30 19:44",
+  "panels": 133,
+  "series": 146,
+  "points": 197390,
+  "errors": [],
+  "stale": [
+    {
+      "panel": "credit-CRDQUSAPABIS",
+      "series": "CRDQUSAPABIS",
+      "asof": "2025-10-01"
+    },
+    {
+      "panel": "credit-CRDQXMAPABIS",
+      "series": "CRDQXMAPABIS",
+      "asof": "2025-10-01"
+    },
+    {
+      "panel": "credit-CRDQJPAPABIS",
+      "series": "CRDQJPAPABIS",
+      "asof": "2025-10-01"
+    },
+    {
+      "panel": "credit-CRDQCNAPABIS",
+      "series": "CRDQCNAPABIS",
+      "asof": "2025-10-01"
+    }
+  ],
+  "source_failures": [],
+  "missing_curve_points": []
+}

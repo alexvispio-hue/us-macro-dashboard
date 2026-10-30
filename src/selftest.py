@@ -240,7 +240,7 @@ def main() -> int:
     lib = (root / "web" / "vendor" / "lightweight-charts.js").read_text(encoding="utf-8")
     out = root / "dashboard_selftest.html"
     out.write_text(
-        tpl.replace("/*__LIB__*/", lib).replace("/*__DATA__*/", json.dumps(payload, ensure_ascii=False)),
+        tpl.replace("/*__LIB__*/", lib).replace("/*__RESEARCH__*/", (root / "web" / "research.js").read_text(encoding="utf-8")).replace("/*__DATA__*/", json.dumps(payload, ensure_ascii=False)),
         encoding="utf-8")
     print(f"\n  тестовая страница: {out}  ({out.stat().st_size/1e6:.1f} МБ)")
     print("\nOK")
