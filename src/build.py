@@ -6,6 +6,7 @@
     python src/build.py --open     то же + открыть в браузере
     python src/build.py --doctor   только проверка источников, без сборки
     python src/build.py --offline  собрать из кэша, в сеть не ходить
+    python src/build.py --refresh  перезапросить источники без ожидания 6 часов
 """
 
 from __future__ import annotations
@@ -69,6 +70,11 @@ class _Tee:
 
 def main() -> int:
     args = set(sys.argv[1:])
+    if "--offline" in args and "--refresh" in args:
+        print("Нельзя одновременно использовать --offline и --refresh")
+        return 2
+    if "--refresh" in args:
+        sources.CACHE_HOURS = 0  # перезапросить наблюдения; резервный кэш не удаляем
     if "--offline" in args:
         sources.CACHE_HOURS = 10 ** 6      # кэш всегда считаем свежим
         sources.OFFLINE = True             # и метаданные из сети тоже не тянем
