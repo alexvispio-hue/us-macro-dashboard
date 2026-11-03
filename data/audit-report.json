@@ -1,10 +1,15 @@
 {
-  "generated": "2026-10-30 21:56",
+  "generated": "2026-11-03 20:55",
   "panels": 133,
   "series": 146,
-  "points": 197390,
+  "points": 197586,
   "errors": [],
   "stale": [
+    {
+      "panel": "cs",
+      "series": "CS index",
+      "asof": "2026-08-01"
+    },
     {
       "panel": "credit-CRDQUSAPABIS",
       "series": "CRDQUSAPABIS",
@@ -24,6 +29,11 @@
       "panel": "credit-CRDQCNAPABIS",
       "series": "CRDQCNAPABIS",
       "asof": "2025-10-01"
+    },
+    {
+      "panel": "consumercredit",
+      "series": "TOTALSL",
+      "asof": "2026-08-01"
     }
   ],
   "source_failures": [],
