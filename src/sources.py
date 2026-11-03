@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 import re
 import sys
@@ -361,7 +362,6 @@ def fetch_jgb30() -> pd.Series:
 # data-api.ecb.europa.eu, например, отвечает не из любой сети, а DBnomics да.
 
 def _parse_dbnomics(name: str, text: str) -> pd.Series:
-    import json
     j = json.loads(text)
     docs = (j.get("series") or {}).get("docs") or []
     if not docs:
@@ -383,6 +383,17 @@ def _parse_dbnomics(name: str, text: str) -> pd.Series:
     return s.dropna()
 
 
+def _get_ecb_observations(dataset: str, code: str) -> str:
+    url = f"https://data-api.ecb.europa.eu/service/data/{dataset}/{code}?format=csvdata"
+    frame = pd.read_csv(io.StringIO(_get(url, timeout=30, retries=2)))
+    frame = frame.loc[frame["KEY"].eq(f"{dataset}.{code}"), ["TIME_PERIOD", "OBS_VALUE"]]
+    frame["OBS_VALUE"] = pd.to_numeric(frame["OBS_VALUE"], errors="coerce")
+    frame = frame.dropna()
+    return json.dumps({"series": {"docs": [{
+        "period": frame["TIME_PERIOD"].tolist(), "value": frame["OBS_VALUE"].tolist(),
+    }]}})
+
+
 def fetch_dbnomics(name: str, spec: dict) -> pd.Series:
     cache = RAW / f"dbnomics_{name}.json"
     url = (f"https://api.db.nomics.world/v22/series/"
@@ -392,17 +403,22 @@ def fetch_dbnomics(name: str, spec: dict) -> pd.Series:
             s = _parse_dbnomics(name, cache.read_text(encoding="utf-8"))
             _log("DBNOM", name, "cache", f"n={len(s)}")
             return s
-        text = _get(url)
+        provider = "DBNOM"
         try:
+            text = _get(url, timeout=30, retries=2)
             s = _parse_dbnomics(name, text)
-        except Exception:                                     # noqa: BLE001
-            _save_bad(cache, text)      # мусор кладём в .bad, кэш не трогаем
-            raise
-        if len(s) == 0:
-            _save_bad(cache, text)
-            raise ValueError("пустой ряд")
+            if s.empty:
+                raise ValueError("пустой ряд DBnomics")
+        except Exception:
+            if spec["provider"] != "ECB":
+                raise
+            provider = "ECB"
+            text = _get_ecb_observations(spec["dataset"], spec["code"])
+            s = _parse_dbnomics(name, text)
+            if s.empty:
+                raise ValueError("пустой ряд ЕЦБ")
         cache.write_text(text, encoding="utf-8")   # кэш — только после успешного разбора
-        _log("DBNOM", name, "ok",
+        _log(provider, name, "ok",
              f"{spec['provider']}/{spec['dataset']}  n={len(s)}  "
              f"last={s.index[-1].date()} {s.iloc[-1]:,.6g}")
         return s
