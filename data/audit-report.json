@@ -1,8 +1,8 @@
 {
-  "generated": "2026-11-03 20:55",
+  "generated": "2026-11-09 22:16",
   "panels": 133,
   "series": 146,
-  "points": 197586,
+  "points": 197938,
   "errors": [],
   "stale": [
     {
@@ -31,11 +31,27 @@
       "asof": "2025-10-01"
     },
     {
-      "panel": "consumercredit",
-      "series": "TOTALSL",
-      "asof": "2026-08-01"
+      "panel": "fx-DEXUSEU",
+      "series": "DEXUSEU",
+      "asof": "2026-10-30"
+    },
+    {
+      "panel": "fx-DEXUSUK",
+      "series": "DEXUSUK",
+      "asof": "2026-10-30"
+    },
+    {
+      "panel": "fx-DEXJPUS",
+      "series": "DEXJPUS",
+      "asof": "2026-10-30"
+    },
+    {
+      "panel": "fx-DEXCHUS",
+      "series": "DEXCHUS",
+      "asof": "2026-10-30"
     }
   ],
   "source_failures": [],
+  "source_warnings": [],
   "missing_curve_points": []
 }
