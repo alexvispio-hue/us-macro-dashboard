@@ -298,6 +298,17 @@ STRESS_PARTS = {"VIXCLS": "VIX", "MOVE": "MOVE", "BAMLH0A0HYM2": "HY OAS",
                 "NFCI": "NFCI", "STLFSI4": "STLFSI"}
 
 
+def vix_series(raw: dict) -> pd.Series:
+    """Keep official closes and append newer Yahoo observations."""
+    official = raw.get("VIXCLS", pd.Series(dtype=float)).dropna().sort_index()
+    market = raw.get("VIX", pd.Series(dtype=float)).dropna().sort_index()
+    if official.empty:
+        return market
+    if market.empty:
+        return official
+    return pd.concat([official, market.loc[market.index > official.index[-1]]])
+
+
 def stress_composite(raw: dict) -> tuple[pd.Series, list[str], list[str]]:
     """
     Композитный индекс стресса: средний z-score по доступным метрикам.
@@ -309,24 +320,25 @@ def stress_composite(raw: dict) -> tuple[pd.Series, list[str], list[str]]:
     и мёртвый ряд давал дрейфующий z-score, тянувший весь индекс.
     """
     comps, used, dropped = [], [], []
-    today = pd.Timestamp.today().normalize()
     for sid, label in STRESS_PARTS.items():
         s = raw.get(sid, pd.Series(dtype="float64"))
-        if (s is None or len(s) == 0) and sid == "VIXCLS":
-            s = raw.get("VIX", pd.Series(dtype="float64"))
+        if sid == "VIXCLS":
+            s = vix_series(raw)
         stamp = asof(s)
         if stamp is None:
             dropped.append(f"{label}: нет данных")
             continue
-        if (today - stamp).days > C.STALE_DAYS:
+        if is_stale(s):
             dropped.append(f"{label}: заморожен на {stamp.date()}")
             continue
-        comps.append(z(daily(s)))
+        # Stop each component at its last observation before normalizing.
+        # Extending a constant level would change its rolling z-score.
+        comps.append(z(daily(s).loc[:stamp]))
         used.append(label)
     if not comps:
         return pd.Series(dtype="float64"), used, dropped
     df = pd.concat(comps, axis=1, sort=True)
-    return df.mean(axis=1, skipna=True).dropna(), used, dropped
+    return df.ffill().mean(axis=1, skipna=True).dropna(), used, dropped
 
 
 def fed_stance(raw: dict) -> pd.Series:
@@ -399,9 +411,9 @@ def build_panels(raw: dict) -> list[dict]:
     gm2, gm2_parts, gm2_out = global_m2_usd(raw)
     cbtot, cb_parts, cb_out = cb_balance_usd(raw)
     stress, stress_used, stress_out = stress_composite(raw)
-    stress_sources=[g(sid) if len(g(sid)) else g("VIX") for sid,label in STRESS_PARTS.items() if label in stress_used]
-    stress_stamp=min(filter(None,[asof(a) for a in stress_sources]),default=None)
-    stress_cadence=max(stress_sources,key=cadence_days) if stress_sources else pd.Series(dtype=float)
+    stress_sources={label: vix_series(raw) if sid == "VIXCLS" else g(sid)
+                    for sid,label in STRESS_PARTS.items() if label in stress_used}
+    stress_stamp=asof(stress)
     stance = fed_stance(raw)
     rspx = real_spx_yoy(raw)
 
@@ -417,7 +429,7 @@ def build_panels(raw: dict) -> list[dict]:
     hyg, lqd = align(g("HYG"), g("LQD"))
     risk_spread = (hyg / lqd.replace(0, np.nan)).dropna()
 
-    vix = g("VIXCLS") if len(g("VIXCLS")) else g("VIX")
+    vix = vix_series(raw)
 
     # --- колонки
     col1 = {
@@ -425,7 +437,8 @@ def build_panels(raw: dict) -> list[dict]:
         "panels": [
             _p("tlt",   "TLT",                    [_s("TLT", g("TLT"), W)]),
             _p("move",  "MOVE",                   [_s("MOVE", g("MOVE"), "#f48fb1")]),
-            _p("vix",   "VIX",                    [_s("VIX", vix, "#ffd54f")]),
+            _p("vix",   "VIX",                    [_s("VIX", vix, "#ffd54f")],
+               sub="Закрытия FRED + более свежие наблюдения Yahoo; текущая сессия может быть незавершённой"),
             _p("dxy",   "DXY",                    [_s("DXY", g("DXY"), "#26a69a", "area")], digits=3),
             _p("ffr",   "FED RATE + ROC",
                [_s("Fed Funds", ffr, "#ffee58", stamp=asof(g("DFF"))),
@@ -459,9 +472,11 @@ def build_panels(raw: dict) -> list[dict]:
                    + (" · выброшено: " + "; ".join(cb_out) if cb_out else "")),
             _p("netliq","Net Fed Liquidity (млрд $)", [_s("Активы−TGA−RRP", netliq, "#ef5350", stamp=min(filter(None, [asof(g("WALCL")), asof(g("WTREGEN")), asof(g("RRPONTSYD"))]), default=None))], digits=0, height=1.3),
             _p("stress","Stress Index (z-score)",
-               [_s("Композит", stress, "#ff9800", "hist", invert=True, stamp=stress_stamp, freshness_source=stress_cadence)], zero=True,
+               [_s("Композит", stress, "#ff9800", "hist", invert=True, stamp=stress_stamp)], zero=True,
                sub=("средний z по: " + ", ".join(stress_used) if stress_used else "нет компонентов")
-                   + "; красный — стресс растёт"
+                   + "; окно 1250 рабочих дней; недельные компоненты сохраняют последний z-score"
+                   + "; красный > 0 — выше среднего, зелёный < 0 — ниже среднего"
+                   + " · даты: " + ", ".join(label + " " + asof(a).strftime("%Y-%m-%d") for label,a in stress_sources.items())
                    + (" · выброшено: " + "; ".join(stress_out) if stress_out else "")),
             _p("rrp",   "Reverse Repo (млрд $)",  [_s("RRP", g("RRPONTSYD"), "#4caf50", "area")], digits=0,
                sub="пик 2554 млрд в дек. 2022, сейчас опустошён — околонулевые значения тут настоящие"),

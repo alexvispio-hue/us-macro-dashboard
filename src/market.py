@@ -21,7 +21,15 @@ def bars(name, symbol):
         frame = frame.dropna(subset=['open','high','low','close']).sort_index()
         frame = frame[~frame.index.duplicated(keep='last')]
         frame = frame[(frame.index >= D.DISPLAY_START) & (frame.high >= frame.low)]
+        invalid = ~((frame.low <= frame.open) & (frame.open <= frame.high)
+                    & (frame.low <= frame.close) & (frame.close <= frame.high))
+        rejected = frame.index[invalid].strftime('%Y-%m-%d').tolist()
+        if rejected:
+            sources._log('OHLCV', name, 'warning',
+                         'Пропущены противоречивые свечи поставщика: ' + ', '.join(rejected))
+        frame = frame.loc[~invalid].copy()
         frame['volume'] = frame.volume.fillna(0).clip(lower=0)
+        frame.attrs['rejected_dates'] = rejected
         return frame
     except Exception as exc:
         sources._log('OHLCV', name, 'fail', str(exc))
@@ -85,6 +93,8 @@ def price_panel(pid, title, frame):
     series['data'] = [dict(time=t.strftime('%Y-%m-%d'), **{k:float(v) for k,v in row.items()}) for t,row in frame.iterrows()]
     p = D._p(pid,title,[series],height=3.5,
         sub='Yahoo Finance · профиль видимого диапазона: оценка по дневным OHLCV · EMA 50/200')
+    if frame.attrs.get('rejected_dates'):
+        p['sub'] += ' · Внимание: некорректные OHLC поставщика за ' + ', '.join(frame.attrs['rejected_dates']) + ' пропущены'
     p['profile'] = True
     p['band'] = {'fast':D.to_points(close.ewm(span=50,adjust=False).mean()),
                  'slow':D.to_points(close.ewm(span=200,adjust=False).mean())}
@@ -98,10 +108,10 @@ def build(raw):
     gp = price_panel('gold','GOLD · COMEX futures',gold)
     def panel(pid,title,series,**kw): return D._p(pid,title,series,**kw)
     def s(name,data,color,kind=None): return D._s(name,data,color,kind)
-    vix = raw.get('VIXCLS',pd.Series(dtype=float))
+    vix = D.vix_series(raw)
     stress = vix.rolling(252,min_periods=60).rank(pct=True)*100
     stressp = panel('systemstress','System Stress · VIX percentile',[s('VIX percentile',stress,'#36ccc2','area')],
-                    sub='Аналог: процентиль VIX за 252 наблюдения; COR1M не включён',height=1.1)
+                    sub='Ранг VIX за 252 наблюдения, 0–100%; последнее значение Yahoo может быть внутридневным',height=1.1)
     stressp['levels'] = [80,95]
     sp['zones'] = D.to_points((stress >= 80).astype(float))
     r = panel('rsi','RSI · SPY · 14',[s('RSI',rsi(spy.close),'#e3ce62')],height=.8)
@@ -136,5 +146,6 @@ def build(raw):
         summary.append(dict(name=name,value=D.last_val(a),change=D.last_val(a.diff()),asof=str(a.index[-1].date()) if len(a) else None))
     volume=panel('spyvolume','SPY · Volume',[s('Объём',spy.volume,'#5f98c3','volume')],height=.7)
     return dict(columns=[{'title':'S&P 500 · ЦЕНА И СТРЕСС','panels':[r,sp,volume,stressp,
-        panel('marketvix','VIX',[s('VIX',vix,'#6c9fe8')],height=.7)]},
+        panel('marketvix','VIX',[s('VIX',vix,'#6c9fe8')],height=.7,
+              sub='Закрытия FRED + более свежие наблюдения Yahoo; текущая сессия может быть незавершённой')]},
         {'title':'GOLD · MANAGED MONEY','panels':[gp]+cotpanels}], curves=curves,cot=summary)

@@ -366,7 +366,7 @@ const DASH = /*__DATA__*/;
       const body=table(['Показатель','Ряд','Наблюдение','Статус','Источники']);
       function draw(){body.replaceChildren();for(const r of rows){const s=r.series,warn=s.stale||!s.data?.length;if(select.value==='warning'&&!warn)continue;const tr=row(body,[r.panel.title,s.name,s.asof||'—',!s.data?.length?'Нет данных':s.stale?'Проверьте свежесть':'Доступен',(r.panel.sources||[]).map(x=>x.provider+' '+x.id).join(', ')],r.panel);tr.children[3].className=warn?'quality-warning':'quality-ok';}}
       select.onchange=draw;draw();
-      const failures=(DASH.diagnostics||[]).filter(d=>['fail','skip'].includes(d.status)||(d.status==='cache'&&/сеть упала|старый кэш/i.test(d.detail||'')));
+      const failures=(DASH.diagnostics||[]).filter(d=>['fail','skip','warning'].includes(d.status)||(d.status==='cache'&&/сеть упала|старый кэш/i.test(d.detail||'')));
       if(failures.length){const h=document.createElement('h3');h.textContent='Загрузка и резервный кэш';card.appendChild(h);for(const d of failures){const p=document.createElement('p');p.className='quality-warning';p.textContent=d.kind+' · '+d.name+' · '+d.status+' · '+d.detail;card.appendChild(p);}}return;
     }
     if(kind==='compare'){
@@ -732,7 +732,7 @@ const DASH = /*__DATA__*/;
       // Ряд протянут вперёд, чтобы панели совпадали по времени. Если настоящее
       // наблюдение сильно старше остальных — говорим об этом, а не выдаём
       // протянутое значение за сегодняшнее.
-      if (sp.stale && sp.asof) {
+      if (sp.asof && time == null) {
         const a = document.createElement("span");
         a.className = "legdate";
         a.style.marginLeft = "4px";

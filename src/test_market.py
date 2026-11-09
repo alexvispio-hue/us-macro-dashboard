@@ -1,6 +1,8 @@
 """Offline regression tests for new calculations and missing source handling."""
 import json
 import unittest
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 import numpy as np
 import pandas as pd
@@ -8,6 +10,23 @@ import market
 import sources
 
 class MarketTests(unittest.TestCase):
+    def test_invalid_vendor_candle_is_excluded_with_warning(self):
+        quote = dict(open=[10, 5], high=[12, 12], low=[9, 9],
+                     close=[11, 11], volume=[100, 200])
+        payload = {'chart': {'result': [{
+            'timestamp': [1793700000, 1793786400],
+            'indicators': {'quote': [quote]},
+        }]}}
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / 'yahoo_GOLD.json').write_text(json.dumps(payload), encoding='utf-8')
+            with patch.object(sources, 'RAW', Path(tmp)), patch.object(sources, 'fetch_yahoo'), patch.object(sources, '_log') as log:
+                frame = market.bars('GOLD', 'GC=F')
+            self.assertEqual(len(frame), 1)
+            self.assertEqual(len(frame.attrs['rejected_dates']), 1)
+            self.assertEqual(log.call_args.args[2], 'warning')
+            self.assertIn(frame.attrs['rejected_dates'][0],
+                          market.price_panel('gold', 'GOLD', frame)['sub'])
+
     def test_rsi_boundaries(self):
         self.assertEqual(market.rsi(pd.Series(np.arange(40))).iloc[-1],100)
         self.assertEqual(market.rsi(pd.Series(-np.arange(40))).iloc[-1],0)
