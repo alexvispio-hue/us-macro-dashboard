@@ -1,8 +1,8 @@
 {
-  "generated": "2026-11-09 22:22",
+  "generated": "2026-11-12 12:10",
   "panels": 133,
   "series": 146,
-  "points": 197938,
+  "points": 198147,
   "errors": [],
   "stale": [
     {
@@ -29,26 +29,6 @@
       "panel": "credit-CRDQCNAPABIS",
       "series": "CRDQCNAPABIS",
       "asof": "2025-10-01"
-    },
-    {
-      "panel": "fx-DEXUSEU",
-      "series": "DEXUSEU",
-      "asof": "2026-10-30"
-    },
-    {
-      "panel": "fx-DEXUSUK",
-      "series": "DEXUSUK",
-      "asof": "2026-10-30"
-    },
-    {
-      "panel": "fx-DEXJPUS",
-      "series": "DEXJPUS",
-      "asof": "2026-10-30"
-    },
-    {
-      "panel": "fx-DEXCHUS",
-      "series": "DEXCHUS",
-      "asof": "2026-10-30"
     }
   ],
   "source_failures": [],
