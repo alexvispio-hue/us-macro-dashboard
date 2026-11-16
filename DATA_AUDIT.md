@@ -1,7 +1,7 @@
 # Проверка дашборда
-Сборка: 2026-11-12 12:10
+Сборка: 2026-11-17 00:01
 
-Проверено уникальных панелей: 133; рядов в панелях: 146; точек: 198147.
+Проверено уникальных панелей: 133; рядов в панелях: 146; точек: 198374.
 
 Ошибок данных: 0. Ошибок загрузки: 0. Пропусков на кривой доходности: 0.
 
@@ -12,10 +12,14 @@
 | Панель | Ряд | Последнее наблюдение |
 |---|---|---|
 | cs | CS index | 2026-08-01 |
-| credit-CRDQUSAPABIS | CRDQUSAPABIS | 2025-10-01 |
-| credit-CRDQXMAPABIS | CRDQXMAPABIS | 2025-10-01 |
-| credit-CRDQJPAPABIS | CRDQJPAPABIS | 2025-10-01 |
-| credit-CRDQCNAPABIS | CRDQCNAPABIS | 2025-10-01 |
+| credit-CRDQUSAPABIS | CRDQUSAPABIS | 2026-01-01 |
+| credit-CRDQXMAPABIS | CRDQXMAPABIS | 2026-01-01 |
+| credit-CRDQJPAPABIS | CRDQJPAPABIS | 2026-01-01 |
+| credit-CRDQCNAPABIS | CRDQCNAPABIS | 2026-01-01 |
+| fx-DEXUSEU | DEXUSEU | 2026-11-06 |
+| fx-DEXUSUK | DEXUSUK | 2026-11-06 |
+| fx-DEXJPUS | DEXJPUS | 2026-11-06 |
+| fx-DEXCHUS | DEXCHUS | 2026-11-06 |
 
 Четыре ряда BIS через FRED заканчиваются наблюдением за IV квартал 2025 года (FRED маркирует квартал датой 2025-10-01). Они показываются с предупреждением и не протягиваются до сегодняшней даты как новые наблюдения.
 

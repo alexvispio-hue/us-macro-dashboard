@@ -1,8 +1,8 @@
 {
-  "generated": "2026-11-12 12:10",
+  "generated": "2026-11-17 00:01",
   "panels": 133,
   "series": 146,
-  "points": 198147,
+  "points": 198374,
   "errors": [],
   "stale": [
     {
@@ -13,22 +13,42 @@
     {
       "panel": "credit-CRDQUSAPABIS",
       "series": "CRDQUSAPABIS",
-      "asof": "2025-10-01"
+      "asof": "2026-01-01"
     },
     {
       "panel": "credit-CRDQXMAPABIS",
       "series": "CRDQXMAPABIS",
-      "asof": "2025-10-01"
+      "asof": "2026-01-01"
     },
     {
       "panel": "credit-CRDQJPAPABIS",
       "series": "CRDQJPAPABIS",
-      "asof": "2025-10-01"
+      "asof": "2026-01-01"
     },
     {
       "panel": "credit-CRDQCNAPABIS",
       "series": "CRDQCNAPABIS",
-      "asof": "2025-10-01"
+      "asof": "2026-01-01"
+    },
+    {
+      "panel": "fx-DEXUSEU",
+      "series": "DEXUSEU",
+      "asof": "2026-11-06"
+    },
+    {
+      "panel": "fx-DEXUSUK",
+      "series": "DEXUSUK",
+      "asof": "2026-11-06"
+    },
+    {
+      "panel": "fx-DEXJPUS",
+      "series": "DEXJPUS",
+      "asof": "2026-11-06"
+    },
+    {
+      "panel": "fx-DEXCHUS",
+      "series": "DEXCHUS",
+      "asof": "2026-11-06"
     }
   ],
   "source_failures": [],
