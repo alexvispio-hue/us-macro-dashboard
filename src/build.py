@@ -24,6 +24,7 @@ import config as C          # noqa: E402
 import sources              # noqa: E402
 import derive               # noqa: E402
 import market               # noqa: E402
+import nvidia               # noqa: E402
 import catalogue            # noqa: E402
 import history              # noqa: E402
 
@@ -186,7 +187,7 @@ def main() -> int:
         "displayStart": derive.DISPLAY_START,
         "columns": columns,
         "markets": markets,
-        "workspaces": catalogue.build(raw, columns, markets),
+        "workspaces": catalogue.build(raw, columns, markets) + [nvidia.build()],
         "diagnostics": sources.DIAG,
     }
 

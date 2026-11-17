@@ -30,6 +30,8 @@ def panels(payload):
 
 def annotate(payload, raw):
     for panel in panels(payload).values():
+        if 'sources' in panel:
+            continue
         ids=panel.get('source_ids') or BASE.get(panel['id']) or [s['name'] for s in panel['series'] if s['name'] in raw]
         if panel['id'] in ('vix','marketvix','systemstress','stress'):
             official = raw.get('VIXCLS',pd.Series(dtype=float)).dropna()

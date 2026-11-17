@@ -10,7 +10,7 @@ def inspect(payload):
     panels={}
     for col in payload['columns']+payload['markets']['columns']+[c for w in payload.get('workspaces',[]) for c in w['columns']]:
         for panel in col['panels']:panels[panel['id']]=panel
-    errors=[];stale=[];series_count=0;points=0
+    errors=[];stale=[];unavailable=[];series_count=0;points=0
     today=dt.date.today().isoformat()
     for pid,panel in panels.items():
         for row in panel['series']:
@@ -18,7 +18,8 @@ def inspect(payload):
             data=row.get('data',[]);points+=len(data)
             key={'panel':pid,'series':row['name']}
             times=[d['time'] for d in data]
-            if not data:errors.append({**key,'issue':'empty'})
+            if not data:
+                (unavailable if panel.get('allowUnavailable') else errors).append({**key,'issue':'empty'})
             if times!=sorted(set(times)):errors.append({**key,'issue':'dates_unsorted_or_duplicated'})
             if times and times[-1]>today:errors.append({**key,'issue':'future_observation','date':times[-1]})
             if any(not math.isfinite(v) for d in data for v in d.values() if isinstance(v,(int,float))):errors.append({**key,'issue':'non_finite_value'})
@@ -30,7 +31,7 @@ def inspect(payload):
     failed=[{'kind':d['kind'],'name':d['name'],'status':d['status']} for d in payload.get('diagnostics',[]) if d['status'] in ('fail','skip')]
     missing_curve=[{'curve':c['name'],'tenor':v['tenor']} for c in payload['markets']['curves'] for v in c['values'] if v['value'] is None]
     warnings=[d for d in payload.get('diagnostics',[]) if d['status']=='warning']
-    return dict(generated=payload['generated'],panels=len(panels),series=series_count,points=points,errors=errors,stale=stale,source_failures=failed,source_warnings=warnings,missing_curve_points=missing_curve)
+    return dict(generated=payload['generated'],panels=len(panels),series=series_count,points=points,errors=errors,stale=stale,unavailable=unavailable,source_failures=failed,source_warnings=warnings,missing_curve_points=missing_curve)
 
 def main():
     report=inspect(json.loads((ROOT/'data/dashboard.json').read_text(encoding='utf-8')))
@@ -42,6 +43,10 @@ def main():
     if report['source_warnings']:
         lines += ['## Предупреждения поставщиков', '']
         lines += [f"- {d['name']}. {d['detail']}" for d in report['source_warnings']]
+        lines += ['']
+    if report['unavailable']:
+        lines += ['## Недоступные ряды', '']
+        lines += [f"- {r['panel']} · {r['series']}" for r in report['unavailable']]
         lines += ['']
     if report['errors']:lines+=['## Ошибки',json.dumps(report['errors'],ensure_ascii=False,indent=2)]
     (ROOT/'DATA_AUDIT.md').write_text('\n'.join(lines),encoding='utf-8')

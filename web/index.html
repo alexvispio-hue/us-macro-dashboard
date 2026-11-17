@@ -957,6 +957,15 @@ const DASH = /*__DATA__*/;
     if(!panel.profile && !panel.zones)return ()=>{};
     const canvas=document.createElement('canvas');canvas.className='overlay';host.appendChild(canvas);
     let scheduled=0,dead=false;
+    let pointer=null;
+    function movePointer(event){
+      if(panel.profileUnit){
+        const rect=host.getBoundingClientRect();
+        pointer={x:event.clientX-rect.left,y:event.clientY-rect.top};
+      }
+      schedule();
+    }
+    function clearPointer(){pointer=null;schedule();}
     function schedule(){if(!scheduled && !dead)scheduled=requestAnimationFrame(()=>{scheduled=0;try{draw();}catch(e){console.error("overlay",e.message,e.stack);}});}
     function draw(){
       if(dead || !host.clientWidth || !host.clientHeight || !made[0])return;
@@ -1016,6 +1025,17 @@ const DASH = /*__DATA__*/;
           ctx.strokeStyle='#e2bd68';ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(edge-width,yp);ctx.lineTo(edge,yp);ctx.stroke();ctx.setLineDash([]);
           ctx.font='10px Segoe UI';ctx.fillStyle='#e2bd68';ctx.fillText('POC '+fmtNum(low+(poc+.5)*step),edge-width,Math.max(70,yp-5));
           ctx.fillStyle='#a6afbd';ctx.fillText('VP · оценка',edge-width,ph-8);
+          if(panel.profileUnit){
+            const hovered=pointer && pointer.x>=edge-width && pointer.x<=pw && pointer.y>=0 && pointer.y<ph
+              ? api.coordinateToPrice(pointer.y) : null;
+            const bin=hovered===null ? poc : Math.max(0,Math.min(n-1,Math.floor((hovered-low)/step)));
+            const center=fmtNum(high===low ? low : low+(bin+.5)*step);
+            const volume=new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(totals[bin]);
+            const label=(hovered===null?'POC ':'')+'$'+center+' · '+volume+panel.profileUnit;
+            const labelWidth=ctx.measureText(label).width+14;
+            ctx.fillStyle='#101821';ctx.fillRect(edge-labelWidth,8,labelWidth,21);
+            ctx.fillStyle='#e2bd68';ctx.fillText(label,edge-labelWidth+7,22);
+          }
         }
       }
       ctx.restore();
@@ -1024,9 +1044,10 @@ const DASH = /*__DATA__*/;
     chart.timeScale().subscribeVisibleTimeRangeChange(schedule);
     chart.timeScale().subscribeVisibleLogicalRangeChange(schedule);
     chart.subscribeCrosshairMove(schedule);
-    host.addEventListener('wheel',schedule,{passive:true});host.addEventListener('pointermove',schedule);
+    host.addEventListener('wheel',schedule,{passive:true});host.addEventListener('pointermove',movePointer);
+    if(panel.profileUnit)host.addEventListener('pointerleave',clearPointer);
     schedule();
-    const cleanup=()=>{dead=true;cancelAnimationFrame(scheduled);ro.disconnect();host.removeEventListener('wheel',schedule);host.removeEventListener('pointermove',schedule);canvas.remove();};
+    const cleanup=()=>{dead=true;cancelAnimationFrame(scheduled);ro.disconnect();host.removeEventListener('wheel',schedule);host.removeEventListener('pointermove',movePointer);host.removeEventListener('pointerleave',clearPointer);canvas.remove();};
     cleanup.redraw=schedule;return cleanup;
   }
 
