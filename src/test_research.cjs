@@ -17,6 +17,37 @@ assert.ok(R.comparison(specs,'100','2025-01-02','2025-01-02').error);
 const csv=R.csv({series:[{name:'a,"quoted"',data:specs[0].data}]},{from:'2025-01-02',to:'2025-01-03'});assert.equal(csv.split('\r\n').length,3);assert.ok(csv.includes('"a,""quoted"""'));assert.ok(!csv.includes('2025-01-01'));
 console.log('OK: preferences, validation, order, common-date comparison, base100, percent, z-score, zero bases, CSV escaping');
 
+const market=[
+  ['2025-01-30',5950],['2025-01-31',6010],['2025-02-28',5955],
+  ['2025-03-31',5580],['2025-04-30',5570],['2025-06-30',6200],['2025-07-15',6220],
+].map(([time,value])=>({time,value}));
+const monthly={
+  name:'MoM',cadence:'month',unit:'%',
+  data:[['2025-01-01',0.3],['2025-03-01',0.2],['2025-07-01',0.4]].map(([time,value])=>({time,value})),
+};
+const quarterly={
+  name:'GDP',cadence:'quarter',
+  data:[{time:'2025-01-01',value:-0.5},{time:'2025-04-01',value:3.8},{time:'2025-07-01',value:4.4}],
+};
+const marketSpec={name:'S&P 500',cadence:'exact',data:market};
+const windowDates=['2025-01-01','2025-07-15'];
+result=R.comparison([marketSpec,monthly],'level',...windowDates,'auto');
+assert.equal(result.period,'month');
+assert.deepEqual(plain(result.series[0].data.map(p=>[p.time,p.value])),[['2025-01-31',6010],['2025-03-31',5580]]);
+assert.equal(result.series[1].data[0].observation,'2025-01-01');
+assert.ok(R.csv({series:result.series},null,true).includes('"observation_date","unit"'));
+result=R.comparison([marketSpec,quarterly],'level',...windowDates,'auto');
+assert.equal(result.period,'quarter');
+assert.deepEqual(plain(result.series[1].data.map(p=>[p.time,p.value,p.observation])),[
+  ['2025-03-31',-0.5,'2025-01-01'],['2025-06-30',3.8,'2025-04-01'],
+]);
+assert.ok(R.comparison([marketSpec,quarterly],'level',...windowDates,'month').error);
+assert.equal(R.validRange({from:'2025-02-29',to:'2025-03-01'}),false);
+saved=JSON.stringify({compareRange:{from:'2025-01-01',to:'2025-07-15'},compareCadence:'quarter'});
+assert.equal(R.load(storage,[]).compareCadence,'quarter');
+assert.equal(R.load(storage,[]).compareRange.to,'2025-07-15');
+console.log('OK: monthly and quarterly macro alignment, missing and partial periods, original observation dates');
+
 const trades=[
   {time:'2026-11-17',low:100,high:164,open:110,close:140,volume:6400},
   {time:'2026-11-18',low:120,high:120,open:120,close:120,volume:900},

@@ -165,6 +165,7 @@
   .nav-item[data-kind="favorites"]{color:#e9c877;border-left:2px solid #a98b43}.nav-item[data-kind="compare"]{color:#9cbaff;border-left:2px solid #637dad}.nav-item[data-kind="changes"],.nav-item[data-kind="quality"]{color:#a8bccb;border-left:2px solid #526c80}
   .pane .expand{right:8px}.pane .cap{max-width:calc(100% - 154px)}.pane-actions{position:absolute;right:37px;top:10px;z-index:6;display:flex;gap:3px}.pane-actions button{width:22px;height:23px;border:1px solid #283746;background:#14202b;color:#819bab;border-radius:3px;padding:0;font-size:12px}.pane-actions button:hover{color:#d8eef0}.pane-actions button.on{color:#e9cc7b;border-color:#7f693b;background:#2c281c}.pane-actions button.linked{color:#7edccb;border-color:#365f54}.pane-actions button:disabled{opacity:.3;cursor:default}.pane-actions .order-btn{width:18px}
   .pane-actions.personal{right:37px;top:38px}.pane.personal .cap{max-width:calc(100% - 64px)}.toolbar button:disabled{opacity:.45;cursor:default}.toolbar #link-selected.on{color:#7fe4ce;border-color:#437969}
+  .pane-actions .compare-btn{width:34px;font-size:9px;color:#8fdfce}.pane.macro-compare:not(.personal) .cap{max-width:calc(100% - 187px)}
   #workspace-special{margin:18px 28px 26px}.research-card{background:#101923;border:1px solid #263646;border-radius:8px;padding:20px;margin-bottom:14px}.research-card h3{font-size:15px;font-weight:500;margin:0 0 9px}.research-card p{color:#8199ad;font-size:11px;line-height:1.7}.research-controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:15px 0}.research-controls label{display:flex;gap:7px;align-items:center;font-size:10px;color:#91a8bd}.research-controls select,.research-controls input{background:#17232f;color:#d3e0eb;border:1px solid #33495c;padding:8px;border-radius:5px;max-width:260px;font-size:11px}.research-controls button,.research-card>button{padding:8px 12px;background:#18372f;color:#95e2cf;border:1px solid #315b4f;border-radius:4px;font-size:11px}.comparison-plot{height:440px;position:relative;border:1px solid #28394a;border-radius:5px;overflow:hidden}.comparison-legend{display:flex;gap:17px;flex-wrap:wrap;padding:12px 0;font-size:11px}.research-table-wrap{overflow:auto}.research-table{width:100%;border-collapse:collapse;font-size:11px;text-align:left;white-space:nowrap}.research-table th{font-size:9px;letter-spacing:.05em;color:#718ca3;font-weight:500}.research-table th,.research-table td{padding:11px 10px;border-bottom:1px solid #263543}.research-table td{color:#c2d2df}.research-table button{background:none;border:0;color:#87d9c5;font:inherit;cursor:pointer;padding:0}.quality-warning{color:#e6bf7d!important}.quality-ok{color:#77c6ab!important}.research-empty{text-align:center;padding:45px 24px;border:1px dashed #34495b;border-radius:7px;color:#8aa2b7;line-height:1.8}.research-empty strong{display:block;color:#d5e3ed;font-weight:500;font-size:17px;margin-bottom:9px}.source-item{border-top:1px solid #293b4b;padding:15px 0}.source-item a{color:#8fdacb}.source-item p{font-size:11px;color:#8da6bb;line-height:1.8;margin:4px 0}
   #source-dialog{color:#d9e5ee;background:#101a25;border:1px solid #3a5266;border-radius:9px;padding:28px;max-width:640px;width:calc(100% - 30px);max-height:85vh;overflow:auto}#source-dialog::backdrop{background:#030912c9}.dialog-close{float:right;background:#172d3b;color:#b7d0df;border:1px solid #3b5368;border-radius:4px;padding:5px 9px}#source-content h2{font-size:19px;font-weight:500;max-width:85%;margin:0 0 15px}#notice{position:fixed;bottom:22px;right:25px;z-index:200;max-width:360px;padding:12px 17px;background:#193b32;color:#b6eddd;border:1px solid #3f7564;border-radius:6px;font-size:11px;box-shadow:0 7px 25px #0006;display:none}#notice.show{display:block}
   @media(max-width:760px){#workspace-special{margin:15px 16px}.research-card{padding:15px}.research-controls{gap:8px}.research-controls select{max-width:235px}.comparison-plot{height:330px}.pane .cap{max-width:calc(100% - 145px)}.nav-group summary{padding:8px;font-size:9px}.nav-group{padding-top:5px;margin-top:9px}.toolbar #link-selected{font-size:9px}.research-table{font-size:10px}}
@@ -312,11 +313,15 @@ const DASH = /*__DATA__*/;
   ];
   const R=window.MacroResearch;
   const panelIndex=new Map(PAGES.flatMap(p=>p.columns.flatMap(c=>c.panels)).map(p=>[p.id,p]));
+  const usMacroIds=new Set(PAGES.filter(p=>p.family==='MACRO / USA').flatMap(p=>p.columns.flatMap(c=>c.panels.map(panel=>panel.id))));
+  const benchmarkId='today-spx';
+  const seriesKey=(panel,spec)=>panel.id+'::'+spec.name;
+  const availableForComparison=spec=>spec.data?.length>1;
   let storage;try{storage=window.localStorage;}catch(e){storage={getItem:()=>null,setItem:()=>{throw Error('storage');}};}
   const settings=R.load(storage,[...panelIndex.keys()]);
   PAGES.splice(PAGES.findIndex(p=>p.id==='markets')+1,0,
     {id:'favorites',kind:'favorites',family:'WORKSPACE',title:'★ Мой экран',note:'Избранные графики. Меняйте порядок стрелками и высоту кнопкой размера; настройки сохраняются в этом браузере.',columns:[]},
-    {id:'compare',kind:'compare',family:'WORKSPACE',title:'Сравнение рядов',note:'До четырёх рядов на общих датах: исходные значения, база 100, изменение в процентах и z-score.',columns:[]},
+    {id:'compare',kind:'compare',family:'WORKSPACE',title:'Сравнение рядов',note:'Сопоставляйте до четырёх рядов, включая S&P 500, за выбранный период.',columns:[]},
     {id:'changes',kind:'changes',family:'WORKSPACE',title:'Что изменилось',note:'Новые наблюдения и изменения относительно предыдущей сборки данных.',columns:[]},
     {id:'quality',kind:'quality',family:'WORKSPACE',title:'Данные и источники',note:'Даты наблюдений, полнота рядов, резервный кэш и ссылки на первоисточники.',columns:[]});
   page=Math.max(0,PAGES.findIndex(p=>p.id===settings.page));timeframe=settings.timeframe;
@@ -352,12 +357,26 @@ const DASH = /*__DATA__*/;
     for(const source of panel.sources||[]){const item=document.createElement('div');item.className='source-item';const a=document.createElement('a');a.textContent=source.provider+' · '+source.id;a.href=source.url;a.target='_blank';a.rel='noopener';item.appendChild(a);for(const line of ['Частота: '+source.frequency,'Наблюдение: '+(source.asof||panel.series[0]?.asof||'нет данных'),'Кэш сохранён: '+(source.cached?new Date(source.cached).toLocaleString('ru-RU',{timeZone:'Europe/Moscow'})+' МСК':'нет сведений')]){const p=document.createElement('p');p.textContent=line;item.appendChild(p);}host.appendChild(item);}
     const note=document.createElement('p');note.textContent='Дата наблюдения относится к статистическому периоду. Время сохранения кэша и время сборки страницы не равны дате публикации.';host.appendChild(note);document.getElementById('source-dialog').showModal();}
   document.querySelector('#source-dialog .dialog-close').onclick=()=>document.getElementById('source-dialog').close();
+  function compareWithSp500(panel){
+    const benchmark=panelIndex.get(benchmarkId);
+    const spx=benchmark?.series.find(availableForComparison);
+    const macro=panel.series.find(availableForComparison);
+    if(!spx||!macro){notice('Недостаточно данных для сравнения с S&P 500.');return;}
+    settings.compare=[seriesKey(benchmark,spx),seriesKey(panel,macro)];
+    settings.compareMode='level';
+    settings.compareCadence='auto';
+    navigate(PAGES.findIndex(p=>p.kind==='compare'));
+  }
   function addPanelActions(box,panel){const controls=document.createElement('div');controls.className='pane-actions'+(PAGES[page].kind==='favorites'?' personal':'');if(PAGES[page].kind==='favorites')box.classList.add('personal');
     function button(label,text,action,cls=''){const b=document.createElement('button');b.type='button';b.textContent=text;b.title=label;b.setAttribute('aria-label',label+': '+panel.title);b.className=cls;b.onclick=e=>{e.stopPropagation();action(b);};controls.appendChild(b);return b;}
     const favorite=button('В избранное','★',()=>toggleFavorite(panel.id));favorite.classList.toggle('on',settings.favorites.includes(panel.id));favorite.setAttribute('aria-pressed',String(settings.favorites.includes(panel.id)));
     button('Источники','i',()=>openSource(panel));
     button('Изменить размер','↕',()=>{settings.sizes[panel.id]=settings.sizes[panel.id]===420?256:420;box.style.height=settings.sizes[panel.id]+'px';persist();});
     const link=button('Выбрать для связи','⇄',b=>{if(linkedIds.has(panel.id))linkedIds.delete(panel.id);else linkedIds.add(panel.id);if(linkedIds.size<2)groupSyncOn=false;b.classList.toggle('linked',linkedIds.has(panel.id));b.setAttribute('aria-pressed',String(linkedIds.has(panel.id)));updateLinkButton();persist();});link.classList.toggle('linked',linkedIds.has(panel.id));link.setAttribute('aria-pressed',String(linkedIds.has(panel.id)));
+    if(usMacroIds.has(panel.id)&&panel.series.some(availableForComparison)){
+      box.classList.add('macro-compare');
+      button('Сравнить с S&P 500','S&P',()=>compareWithSp500(panel),'compare-btn');
+    }
     if(PAGES[page].kind==='favorites'){for(const [delta,text] of [[-1,'↑'],[1,'↓']]){const b=button(delta<0?'Переместить выше':'Переместить ниже',text,()=>{settings.favorites=R.move(settings.favorites,panel.id,delta);persist();renderColumns();},'order-btn');const i=settings.favorites.indexOf(panel.id);b.disabled=i+delta<0||i+delta>=settings.favorites.length;}}
     box.appendChild(controls);box.style.height=(settings.sizes[panel.id]||256)+'px';
   }
@@ -387,7 +406,7 @@ const DASH = /*__DATA__*/;
     document.getElementById('workspace-family').textContent=entry.family+' / MARKET RESEARCH';
     document.getElementById('workspace-note').textContent=entry.note||'Наблюдения публичных источников. Дата каждого ряда показана в таблице ниже.';
     const ready=panels.filter(p=>p.series.some(s=>s.data?.length)).length;
-    document.getElementById('workspace-badge').textContent=entry.kind==='marketToday'?'Сборка · '+DASH.generated:entry.kind==='compare'?'Общие даты':entry.kind==='changes'?'Сравнение снимков':entry.kind==='quality'?'Контроль данных':ready+' / '+panels.length+' панелей с данными';
+    document.getElementById('workspace-badge').textContent=entry.kind==='marketToday'?'Сборка · '+DASH.generated:entry.kind==='compare'?'Общий период':entry.kind==='changes'?'Сравнение снимков':entry.kind==='quality'?'Контроль данных':ready+' / '+panels.length+' панелей с данными';
     document.getElementById('page-title').textContent='Графики · '+panels.length;
     const metrics=document.getElementById('metrics');metrics.replaceChildren();
     panels.slice(0,4).forEach(p=>{const s=p.series[0],card=document.createElement('article');card.className='metric';
@@ -625,21 +644,122 @@ const DASH = /*__DATA__*/;
       if(failures.length){const h=document.createElement('h3');h.textContent='Загрузка и резервный кэш';card.appendChild(h);for(const d of failures){const p=document.createElement('p');p.className='quality-warning';p.textContent=d.kind+' · '+d.name+' · '+d.status+' · '+d.detail;card.appendChild(p);}}return;
     }
     if(kind==='compare'){
-      heading('Сравнение на общей временной шкале','Совпадающие даты рядов; дополнительная интерполяция не применяется. Z-score рассчитан по общим наблюдениям выбранного периода.');
-      const options=[...panelIndex.values()].flatMap(p=>p.series.filter(s=>s.data?.length>1).map(s=>({key:p.id+'::'+s.name,panel:p,spec:s,label:p.title+' / '+s.name})));
-      const byKey=new Map(options.map(o=>[o.key,o]));settings.compare=settings.compare.filter(k=>byKey.has(k));
-      if(!settings.compare.length)settings.compare=['spy','gold','dxy'].map(id=>options.find(o=>o.panel.id===id)?.key).filter(Boolean);
-      const controls=document.createElement('div');controls.className='research-controls';card.appendChild(controls);
-      for(let i=0;i<4;i++){const label=document.createElement('label');label.textContent=String(i+1);const select=document.createElement('select');select.setAttribute('aria-label','Ряд для сравнения '+(i+1));const blank=document.createElement('option');blank.value='';blank.textContent='Не выбран';select.appendChild(blank);for(const option of options){const o=document.createElement('option');o.value=option.key;o.textContent=option.label;select.appendChild(o);}select.value=settings.compare[i]||'';select.onchange=()=>{const picks=[...controls.querySelectorAll('select[data-pick]')].map(s=>s.value).filter(Boolean);settings.compare=[...new Set(picks)];persist();renderSpecial('compare');};select.dataset.pick='1';label.appendChild(select);controls.appendChild(label);}
-      const label=document.createElement('label');label.textContent='Вид';const mode=document.createElement('select');mode.setAttribute('aria-label','Вид сравнения');for(const [v,t] of [['100','База 100'],['pct','Изменение, %'],['z','Z-score'],['level','Исходные значения']]){const o=document.createElement('option');o.value=v;o.textContent=t;mode.appendChild(o);}mode.value=settings.compareMode;mode.onchange=()=>{settings.compareMode=mode.value;persist();renderSpecial('compare');};label.appendChild(mode);controls.appendChild(label);
-      const colors=['#67d7bf','#e4c278','#90aaff','#e794b3'];const picked=settings.compare.map(k=>byKey.get(k));const result=R.comparison(picked.map((o,i)=>({name:o.label,color:colors[i],data:o.spec.data})),settings.compareMode,currentRange.from,currentRange.to);
-      if(picked.length<2||result.error){const error=document.createElement('p');error.className='quality-warning';error.textContent=picked.length<2?'Выберите минимум два разных ряда.':result.error;card.appendChild(error);return;}
-      const status=document.createElement('p');status.textContent=result.from+' — '+result.to+' · общих дат: '+result.dates+(settings.compareMode==='level'?' · Исходные единицы могут различаться; для сопоставления масштаба используйте базу 100.':'');card.appendChild(status);
-      const legend=document.createElement('div');legend.className='comparison-legend';result.series.forEach(s=>{const span=document.createElement('span');span.style.color=s.color;span.textContent='● '+s.name;legend.appendChild(span);});card.appendChild(legend);
-      const plot=document.createElement('div');plot.className='comparison-plot';card.appendChild(plot);const panel={id:'comparison',title:'Сравнение рядов',series:result.series};specialChart=LC.createChart(plot,baseOptions(true,panel,true));
-      result.series.forEach(s=>addSeries(specialChart,{...s,type:'line'},panel,true));specialChart.timeScale().fitContent();
-      const exportRow=document.createElement('div');exportRow.className='research-controls';for(const [text,action] of [['CSV',()=>download('comparison.csv',R.csv(panel),'text/csv;charset=utf-8')],['PNG',()=>downloadPNG(specialChart,panel,null)]]){const b=document.createElement('button');b.textContent=text;b.onclick=action;exportRow.appendChild(b);}card.appendChild(exportRow);
-      const body=table(['Ряд','Начало','Конец','Изменение от начала']);result.series.forEach(s=>row(body,[s.name,fmtNum(s.data[0].value),fmtNum(s.data.at(-1).value),fmtNum(s.data.at(-1).value-s.data[0].value)]));
+      heading('Сравнение на общей временной шкале','Для недели, месяца или квартала берётся последнее наблюдение каждого ряда внутри периода. Даты макроданных обозначают период наблюдения.');
+      renderComparison(card,table,row);
+    }
+  }
+
+  function renderComparison(card,table,row){
+    const options=[...panelIndex.values()].flatMap(panel=>panel.series.filter(availableForComparison).map(spec=>({
+      key:seriesKey(panel,spec),panel,spec,label:panel.series.length===1?panel.title:panel.title+' / '+spec.name,
+      unit:panel.id===benchmarkId?'п. индекса':spec.suffix?.trim()||panel.suffix?.trim()||'',
+    })));
+    const benchmark=options.find(o=>o.panel.id===benchmarkId);
+    const macro=options.filter(o=>usMacroIds.has(o.panel.id)).sort((a,b)=>a.label.localeCompare(b.label,'ru'));
+    const groups=[
+      ['Индекс S&P 500',benchmark?[benchmark]:[]],
+      ['Макроэкономика США',macro],
+      ['Остальные ряды',options.filter(o=>o!==benchmark&&!usMacroIds.has(o.panel.id))],
+    ];
+    const byKey=new Map(options.map(o=>[o.key,o]));
+    const update=()=>{persist();renderSpecial('compare');};
+    settings.compare=settings.compare.filter(k=>byKey.has(k));
+    if(!settings.compare.length){
+      settings.compare=[benchmark,options.find(o=>o.panel.id==='corepce-mom')].filter(Boolean).map(o=>o.key);
+      settings.compareMode='level';
+    }
+    function controlRow(tag='div'){
+      const host=document.createElement(tag);host.className='research-controls';card.appendChild(host);return host;
+    }
+    function labelControl(host,text,element){
+      const label=document.createElement('label');label.append(text,element);host.appendChild(label);return element;
+    }
+    function action(host,label,handler){
+      const button=document.createElement('button');button.type='button';button.textContent=label;
+      button.onclick=handler;host.appendChild(button);return button;
+    }
+    const controls=controlRow();
+    const selectors=Array.from({length:4},(_,i)=>{
+      const select=document.createElement('select');select.setAttribute('aria-label','Ряд для сравнения '+(i+1));
+      select.add(new Option('Не выбран',''));
+      for(const [title,entries] of groups){
+        if(!entries.length)continue;
+        const group=document.createElement('optgroup');group.label=title;
+        for(const option of entries)group.appendChild(new Option(option.label,option.key));
+        select.appendChild(group);
+      }
+      select.value=settings.compare[i]||'';
+      select.onchange=()=>{settings.compare=[...new Set(selectors.map(field=>field.value).filter(Boolean))];update();};
+      return labelControl(controls,String(i+1),select);
+    });
+    if(benchmark&&!settings.compare.includes(benchmark.key)){
+      const button=action(controls,'Добавить S&P 500',()=>{settings.compare.unshift(benchmark.key);update();});
+      button.disabled=settings.compare.length===4;
+      if(button.disabled)button.title='Освободите одно из четырёх мест';
+    }
+    const filters=controlRow('form');
+    const range=settings.compareRange||currentRange;
+    const dates=['from','to'].map((key,i)=>{
+      const input=document.createElement('input');input.type='date';input.required=true;input.value=range[key];
+      return labelControl(filters,i===0?'С':'По',input);
+    });
+    action(filters,'Показать период',null).type='submit';
+    filters.onsubmit=event=>{
+      event.preventDefault();
+      const selection={from:dates[0].value,to:dates[1].value};
+      if(!R.validRange(selection)){notice('Проверьте даты начала и конца периода.');return;}
+      settings.compareRange=selection;update();
+    };
+    const frequencies={exact:'Точные даты',week:'По неделям',month:'По месяцам',quarter:'По кварталам'};
+    for(const [key,label,values] of [
+      ['compareCadence','Частота',[['auto','Автоматически'],...Object.entries(frequencies)]],
+      ['compareMode','Вид',[['level','Исходные значения'],['100','База 100'],['pct','Изменение, %'],['z','Z-score']]],
+    ]){
+      const select=document.createElement('select');
+      for(const [value,title] of values)select.add(new Option(title,value));
+      select.value=settings[key];select.onchange=()=>{settings[key]=select.value;update();};
+      labelControl(filters,label,select);
+    }
+
+    const selected=settings.compare.map(key=>byKey.get(key));
+    const colors=['#90aaff','#67d7bf','#e4c278','#e794b3'];
+    const specs=selected.map((o,i)=>({name:o.label,key:o.key,color:colors[i],unit:o.unit,cadence:o.panel.cadence,data:o.spec.data}));
+    const original=settings.compareMode==='level';
+    const scaleGroup=s=>s.unit||s.key;
+    const groupsByUnit=original?[...new Set(specs.map(scaleGroup))]:[];
+    const error=message=>{const p=document.createElement('p');p.className='quality-warning';p.textContent=message;card.appendChild(p);};
+    if(selected.length<2){error('Выберите минимум два разных ряда.');return;}
+    if(groupsByUnit.length>2){error('В режиме исходных значений можно показать две шкалы. Выберите ряды с двумя единицами измерения или переключите вид сравнения.');return;}
+    const result=R.comparison(specs,settings.compareMode,range.from,range.to,settings.compareCadence);
+    if(result.error){error(result.error);return;}
+    const rightGroup=selected.includes(benchmark)?'п. индекса':groupsByUnit[0];
+    for(const s of result.series){
+      s.type='line';
+      s.scale=original&&scaleGroup(s)!==rightGroup?'left':'right';
+      s.suffix=original?s.unit:settings.compareMode==='pct'?'%':'';
+    }
+    const status=document.createElement('p');
+    status.textContent=`${frequencies[result.period]} · ${result.from} — ${result.to} · общих точек: ${result.dates}`;
+    card.appendChild(status);
+    const legend=document.createElement('div');legend.className='comparison-legend';
+    for(const s of result.series){
+      const span=document.createElement('span');span.style.color=s.color;
+      span.textContent='● '+s.name+(original?` · ${s.scale==='left'?'слева':'справа'}${s.unit?' · '+s.unit:''}`:'');
+      legend.appendChild(span);
+    }
+    card.appendChild(legend);
+    const plot=document.createElement('div');plot.className='comparison-plot';card.appendChild(plot);
+    const panel={id:'comparison',title:'Сравнение рядов',series:result.series};
+    specialChart=LC.createChart(plot,baseOptions(true,panel,true));
+    for(const s of result.series)addSeries(specialChart,s,panel,true,s.data);
+    specialChart.timeScale().fitContent();
+    const exports=controlRow();
+    action(exports,'CSV',()=>download('comparison.csv',R.csv(panel,null,true),'text/csv;charset=utf-8'));
+    action(exports,'PNG',()=>downloadPNG(specialChart,panel,null));
+    const body=table(['Ряд','Начало','Конец','Дата последнего наблюдения']);
+    for(const s of result.series){
+      const display=value=>fmtNum(value)+(s.suffix==='%'?'%':s.suffix?' '+s.suffix:'');
+      row(body,[s.name,display(s.data[0].value),display(s.data.at(-1).value),s.data.at(-1).observation],byKey.get(s.key).panel);
     }
   }
 
@@ -771,7 +891,7 @@ const DASH = /*__DATA__*/;
     };
   }
 
-  function addSeries(chart, sp, panel, big) {
+  function addSeries(chart, sp, panel, big, data=dataFor(sp)) {
     const common = {
       priceScaleId: sp.scale === "left" ? "left" : "right",
       lastValueVisible: true,
@@ -780,7 +900,6 @@ const DASH = /*__DATA__*/;
     };
     const kind = sp.type || panel.type || "line";
     const w = big ? 2 : 1;
-    const data = dataFor(sp);
     let s;
     if (kind === "candles") {
       s=chart.addSeries(LC.CandlestickSeries,{...common,upColor:'#48bb85',downColor:'#e45e76',borderVisible:false,wickUpColor:'#48bb85',wickDownColor:'#e45e76'});
@@ -1041,7 +1160,7 @@ const DASH = /*__DATA__*/;
     currentRange = r;
     holdSync();
     saveSoon();
-    if(PAGES[page].kind==='compare'){renderSpecial('compare');return;}
+    if(PAGES[page].kind==='compare'){settings.compareRange=null;renderSpecial('compare');return;}
     if(PAGES[page].kind==='marketToday'){todayGraph?.setRange(r);return;}
     charts.forEach(o => { rememberRange(o.panel,r);try { o.chart.timeScale().setVisibleRange(r); } catch (e) {} });
   }

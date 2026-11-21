@@ -25,6 +25,15 @@ class CatalogueTests(unittest.TestCase):
         self.assertAlmostEqual(yoy,(1.01**12-1)*100)
         self.assertAlmostEqual(momentum,yoy)
         self.assertEqual(self.panel(ws,'cpi-yoy')['series'][0]['asof'],'2024-12-01')
+    def test_monthly_release_requires_the_preceding_calendar_month(self):
+        dates=pd.to_datetime(['2026-01-01','2026-02-01','2026-04-01'])
+        ws=self.workspaces({'DGORDER':pd.Series([100.,102.,108.],index=dates)})
+        panel=self.panel(ws,'durable-mom')
+        row=panel['series'][0]
+        self.assertEqual(panel['cadence'],'month')
+        self.assertEqual(panel['source_ids'],['DGORDER'])
+        self.assertEqual(row['asof'],'2026-02-01')
+        self.assertEqual(row['data'],[{'time':'2026-02-01','value':2.0}])
     def test_dollar_units(self):
         date=pd.to_datetime(['2026-01-01'])
         ws=self.workspaces({k:pd.Series([v],index=date) for k,v in {'GFDEBTN':39_000_000,'GDP':33_000,'TOTALSL':5_000_000}.items()})

@@ -19,6 +19,11 @@ FRED = {
  'BOGZ1FL663067003Q':'Broker customer receivables', 'CP':'Corporate profits after tax',
  'DFII5':'5Y real yield', 'DFII20':'20Y real yield', 'DFII30':'30Y real yield',
  'DGS3MO':'3M Treasury', 'DGS2':'2Y Treasury', 'DGS5':'5Y Treasury', 'DGS10':'10Y Treasury', 'DGS30':'30Y Treasury',
+ 'DGORDER':'Durable goods orders', 'NEWORDER':'Core capital goods orders',
+ 'PI':'Personal income', 'PCE':'Nominal consumer spending', 'PPIFIS':'PPI final demand',
+ 'TCU':'Capacity utilization', 'IPMAN':'Manufacturing production',
+ 'U6RATE':'Broad unemployment', 'CES0500000003':'Average hourly earnings, total private',
+ 'CES0500000002':'Average weekly hours, total private',
 }
 YAHOO = {k:k for k in ['SPY','QQQ','IWM','DIA','VT','EFA','EEM','XLK','XLF','XLE','XLV','XLI','XLP','XLY','XLU','XLB','XLRE','XLC','SOXX','GLD','SLV','DBC']}
 YAHOO.update({'BTC':'BTC-USD','ETH':'ETH-USD','WTI':'CL=F','BRENT':'BZ=F','GAS':'NG=F','COPPER':'HG=F','SILVER':'SI=F','WHEAT':'ZW=F','CORN':'ZC=F','SOY':'ZS=F'})
@@ -72,6 +77,13 @@ def build(raw, columns, markets):
         panel=D._p(pid,title,[D._s(sid,a,COLORS[1],suffix="%",stamp=D.asof(g(sid)))],zero=True,sub=f'{sid} · % · '+('3м, в годовом выражении' if kind=='annual3' else f'изменение за {periods} наблюдений'))
         panel['source_ids']=[sid]
         return panel
+    def monthly_growth(pid, title, sid, months=1):
+        growth = calendar_change(g(sid), months=months)
+        description = 'к предыдущему месяцу' if months == 1 else 'к тому же месяцу год назад'
+        panel = D._p(pid, title, [D._s(sid, growth, COLORS[1], suffix='%')], zero=True,
+                     sub=f'{sid} · изменение {description}, %')
+        panel.update(source_ids=[sid], cadence='month')
+        return panel
     result=[]
     def section(key,family,title,panels,note='',curve=False):
         result.append(dict(id=key,family=family,title=title,note=note,curve=curve,
@@ -84,6 +96,27 @@ def build(raw, columns, markets):
     section('cycle','MACRO / USA','Экономический цикл',old('sahm','spx3','rspx')+[p('industry','Промышленное производство','INDPRO','индекс'),transformed('retail','Розничные продажи · YoY','RSAFS',12)], 'Публичные показатели цикла. Авторский Business Cycle · SOL не воспроизводится без формулы.')
     section('inflation','MACRO / USA','Инфляция · CPI и PCE',[transformed('cpi-yoy','CPI · YoY','CPIAUCSL',12),transformed('corecpi-yoy','Core CPI · YoY','CPILFESL',12),transformed('pce-yoy','PCE · YoY','PCEPI',12),transformed('corepce-yoy','Core PCE · YoY','PCEPILFE',12)]+old('t5yie'))
     section('momentum','MACRO / USA','Импульс инфляции',[transformed('momentum-'+k,t+' · 3m annualized',k,3,'annual3') for k,t in [('CPIAUCSL','CPI'),('CPILFESL','Core CPI'),('PCEPI','PCE'),('PCEPILFE','Core PCE')]], 'Формула: ((индекс / индекс 3 месяца назад)^4 − 1) × 100. Это темп, а не прогноз.')
+    section('us-releases', 'MACRO / USA', 'Макрорелизы · спрос и доходы', [
+        monthly_growth('durable-mom', 'Заказы на товары длительного пользования · MoM', 'DGORDER'),
+        monthly_growth('capgoods-mom', 'Базовые заказы на каптовары · MoM', 'NEWORDER'),
+        monthly_growth('personal-income-mom', 'Личные доходы · MoM', 'PI'),
+        monthly_growth('personal-spending-mom', 'Потребительские расходы · MoM', 'PCE'),
+        monthly_growth('corepce-mom', 'Базовый PCE · MoM', 'PCEPILFE'),
+        monthly_growth('real-spending-mom', 'Реальные потребительские расходы · MoM', 'PCEC96'),
+    ], 'Номинальные доходы и расходы, реальные расходы и индексы цен публикуются отдельно. Базовые заказы на каптовары исключают оборонные товары и самолёты.')
+    section('us-prices-monthly', 'MACRO / USA', 'Инфляция · месячные релизы', [
+        monthly_growth('cpi-mom', 'CPI · MoM', 'CPIAUCSL'),
+        monthly_growth('corecpi-mom', 'Базовый CPI · MoM', 'CPILFESL'),
+        monthly_growth('pce-mom', 'Индекс цен PCE · MoM', 'PCEPI'),
+        monthly_growth('ppi-mom', 'Цены производителей PPI · MoM', 'PPIFIS'),
+        monthly_growth('ppi-yoy', 'Цены производителей PPI · YoY', 'PPIFIS', 12),
+    ], 'PPI относится к конечному спросу. Для всех индексов использованы сезонно скорректированные исходные ряды.')
+    section('us-production-monthly', 'MACRO / USA', 'Производство и розница', [
+        monthly_growth('industry-mom', 'Промышленное производство · MoM', 'INDPRO'),
+        monthly_growth('manufacturing-mom', 'Обрабатывающая промышленность · MoM', 'IPMAN'),
+        monthly_growth('retail-mom', 'Розничные продажи · MoM', 'RSAFS'),
+        p('capacity-utilization', 'Загрузка производственных мощностей', 'TCU', '%'),
+    ])
     receiv=(g('BOGZ1FL663067003Q')/1000).copy()
     receiv.index=pd.DatetimeIndex(receiv.index).to_period('Q').to_timestamp(how='end').normalize()
     m2raw=g('M2SL').dropna()
@@ -103,12 +136,25 @@ def build(raw, columns, markets):
                   sub='FRED Z.1 · требования к клиентам / M2 на конец квартала, %')
     section('broker', 'MACRO / USA', 'Маржинальный долг / M2', [margin_panel, broker],
             'FINRA публикует маржинальный долг ежемесячно. Квартальный ряд FRED Z.1 охватывает также прочие требования брокеров к клиентам.')
-    section('gdp','MACRO / USA','ВВП',[p('gdp-level','Номинальный ВВП','GDP','трлн $',.001),p('realgdp','Реальный ВВП','GDPC1','трлн $ 2017',.001),p('gdp-growth','Реальный ВВП · QoQ SAAR','A191RL1Q225SBEA','%')])
+    gdp_growth = p('gdp-growth', 'Реальный ВВП · QoQ SAAR', 'A191RL1Q225SBEA', '%')
+    gdp_growth.update(cadence='quarter',
+                      sub='BEA · квартальный темп в годовом выражении. Последняя опубликованная оценка для каждого квартала.')
+    section('gdp', 'MACRO / USA', 'ВВП', [
+        p('gdp-level', 'Номинальный ВВП', 'GDP', 'трлн $', .001),
+        p('realgdp', 'Реальный ВВП', 'GDPC1', 'трлн $ 2017', .001),
+        gdp_growth,
+    ])
     section('debt','MACRO / USA','Государственный долг',[p('debt-level','Федеральный долг США','GFDEBTN','трлн $',.000001),p('debt-gdp','Федеральный долг / ВВП','GFDEGDQ188S','%')])
     section('conditions','MACRO / USA','Финансовые условия',old('nfci','stress','risk','vix','move'))
     section('labor','MACRO / USA','Рынок труда и заявки',[p('unemployment','Безработица','UNRATE','%'),p('payrolls','Nonfarm payrolls','PAYEMS','млн',.001),p('claims','Первичные заявки','ICSA','тыс.',.001),p('continuing','Повторные заявки','CCSA','млн',.000001)]+old('sahm'))
     section('consumer','MACRO / USA','Потребитель США',[p('consumption','Реальные расходы потребителей','PCEC96','трлн $ 2017',.001),transformed('consumption-yoy','Реальные расходы · YoY','PCEC96',12),p('realincome','Реальный располагаемый доход','DSPIC96','трлн $ 2017',.001),p('saving','Норма сбережений','PSAVERT','%'),p('carddelinq','Просрочки по кредитным картам','DRCCLACBS','%')], 'BEA: расходы и располагаемый доход в постоянных ценах, SAAR. Просрочки банков — квартальная статистика ФРС; это не текущая доля просрочки всех потребителей.')
     section('labor-detail','MACRO / USA','Найм и участие в труде',[p('jolts','Вакансии · JOLTS','JTSJOL','млн',.001),p('participation','Участие в рабочей силе','CIVPART','%'),D._p('payroll-change','Занятость · изменение за месяц',[D._s('PAYEMS Δ',g('PAYEMS').diff(),'#90aaff',suffix=' тыс.',stamp=D.asof(g('PAYEMS')))],sub='PAYEMS · изменение за одно месячное наблюдение, тыс. человек')])
+    section('us-labor-wages', 'MACRO / USA', 'Зарплаты и рабочие часы', [
+        monthly_growth('wages-mom', 'Средняя почасовая зарплата · MoM', 'CES0500000003'),
+        monthly_growth('wages-yoy', 'Средняя почасовая зарплата · YoY', 'CES0500000003', 12),
+        p('weekly-hours', 'Средняя продолжительность рабочей недели', 'CES0500000002', 'ч'),
+        p('u6', 'Расширенная безработица U-6', 'U6RATE', '%'),
+    ], 'Зарплаты и часы относятся к работникам частного сектора. U-6 включает также часть населения вне рабочей силы и занятых неполный день по экономическим причинам.')
     payroll=g('PAYEMS').dropna()
     if len(payroll):
         payroll_months=payroll.index.to_period('M')
