@@ -96,7 +96,7 @@ def _save_bad(cache: Path, text: str) -> None:
         pass
 
 
-def _get(url: str, timeout: int = 60, retries: int = 3, *, binary: bool = False) -> str | bytes:
+def _get(url: str, timeout: int = 60, retries: int = 3) -> str:
     """GET с ретраями. Если хост уже признан мёртвым — сразу выходим, не ждём таймаут."""
     if OFFLINE:
         raise HostBlocked('offline: нет данных в кэше')
@@ -110,7 +110,7 @@ def _get(url: str, timeout: int = 60, retries: int = 3, *, binary: bool = False)
             r = SESSION.get(url, timeout=timeout)
             r.raise_for_status()
             HOST_FAILS[host] = 0
-            return r.content if binary else r.text
+            return r.text
         except NET_ERRORS as e:
             last = e
             HOST_FAILS[host] = HOST_FAILS.get(host, 0) + 1
@@ -232,7 +232,10 @@ def fetch_finra_margin() -> pd.Series:
     if OFFLINE or (not cached.empty and _fresh(cache)):
         return cached
     try:
-        contents = _get(FINRA_MARGIN_FILE, timeout=20, retries=2, binary=True)
+        # Use FINRA's public download with standard HTTP headers.
+        response = requests.get(FINRA_MARGIN_FILE, timeout=20)
+        response.raise_for_status()
+        contents = response.content
         series = _parse_finra_margin(contents)
         if series.empty or (not cached.empty and
                             (series.index[-1] < cached.index[-1] or series.index[0] > cached.index[0])):
