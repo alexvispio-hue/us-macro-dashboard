@@ -169,6 +169,18 @@
   #source-dialog{color:#d9e5ee;background:#101a25;border:1px solid #3a5266;border-radius:9px;padding:28px;max-width:640px;width:calc(100% - 30px);max-height:85vh;overflow:auto}#source-dialog::backdrop{background:#030912c9}.dialog-close{float:right;background:#172d3b;color:#b7d0df;border:1px solid #3b5368;border-radius:4px;padding:5px 9px}#source-content h2{font-size:19px;font-weight:500;max-width:85%;margin:0 0 15px}#notice{position:fixed;bottom:22px;right:25px;z-index:200;max-width:360px;padding:12px 17px;background:#193b32;color:#b6eddd;border:1px solid #3f7564;border-radius:6px;font-size:11px;box-shadow:0 7px 25px #0006;display:none}#notice.show{display:block}
   @media(max-width:760px){#workspace-special{margin:15px 16px}.research-card{padding:15px}.research-controls{gap:8px}.research-controls select{max-width:235px}.comparison-plot{height:330px}.pane .cap{max-width:calc(100% - 145px)}.nav-group summary{padding:8px;font-size:9px}.nav-group{padding-top:5px;margin-top:9px}.toolbar #link-selected{font-size:9px}.research-table{font-size:10px}}
 
+  .today-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:9px;margin:12px 0 22px}
+  .today-metric{display:grid;gap:5px;text-align:left;padding:11px 13px;color:var(--text,#d9e5ee);background:#101923;border:1px solid var(--line);border-radius:7px;font:inherit}
+  .today-metric:enabled:hover,.today-metric:focus-visible{border-color:#557b93}
+  .today-metric:enabled{cursor:pointer}
+  .today-metric strong{font-size:20px;font-weight:600}
+  .today-metric small{font-size:10px;color:#a2b5c5}
+  .today-metric strong,.today-move{font-variant-numeric:tabular-nums}
+  .today-up{color:#6ed9bb}.today-down{color:#ff8e9c}
+  .research-card .today-heading{margin-top:22px}
+  .today-stress{font-variant-numeric:tabular-nums}
+  @media(max-width:480px){.today-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
 </style>
 </head>
 <body>
@@ -261,20 +273,22 @@ const DASH = /*__DATA__*/;
   let timeframe = 'D', page = 0;
   const sourcePanels = [...DASH.columns,...(DASH.markets?.columns||[])].flatMap(c=>c.panels);
   const findPanel = id => sourcePanels.find(p=>p.id===id);
+  const workspaces=DASH.workspaces||[];
   const PAGES = [
     {id:'overview',family:'WORKSPACE',title:'Обзор макрорынка',note:'Ставки, ликвидность и экономический цикл. Публичные данные, прозрачные расчёты.',columns:[
       {title:'РЫНОК / ДЕНЕЖНАЯ ПОЛИТИКА',panels:['spy','ffr'].map(findPanel).filter(Boolean)},
       {title:'ЛИКВИДНОСТЬ / ДЕНЕЖНАЯ МАССА',panels:['netliq','gm2'].map(findPanel).filter(Boolean)},
       {title:'ЭКОНОМИЧЕСКИЙ ЦИКЛ / СТРЕСС',panels:['sahm','stress'].map(findPanel).filter(Boolean)}]},
+    ...workspaces.filter(w=>w.kind==='marketToday'),
     {id:'markets',family:'WORKSPACE',title:'Рынки и позиционирование',note:'SPY, золото, волатильность, позиции CFTC и кривая US Treasury.',columns:DASH.markets?.columns||[],curve:true},
-    ...(DASH.workspaces||[]),
+    ...workspaces.filter(w=>w.kind!=='marketToday'),
     {id:'allmacro',family:'WORKSPACE',title:'Все макропанели',note:'Полный исходный набор показателей и композитов.',columns:DASH.columns}
   ];
   const R=window.MacroResearch;
   const panelIndex=new Map(PAGES.flatMap(p=>p.columns.flatMap(c=>c.panels)).map(p=>[p.id,p]));
   let storage;try{storage=window.localStorage;}catch(e){storage={getItem:()=>null,setItem:()=>{throw Error('storage');}};}
   const settings=R.load(storage,[...panelIndex.keys()]);
-  PAGES.splice(2,0,
+  PAGES.splice(PAGES.findIndex(p=>p.id==='markets')+1,0,
     {id:'favorites',kind:'favorites',family:'WORKSPACE',title:'★ Мой экран',note:'Избранные графики. Меняйте порядок стрелками и высоту кнопкой размера; настройки сохраняются в этом браузере.',columns:[]},
     {id:'compare',kind:'compare',family:'WORKSPACE',title:'Сравнение рядов',note:'До четырёх рядов на общих датах: исходные значения, база 100, изменение в процентах и z-score.',columns:[]},
     {id:'changes',kind:'changes',family:'WORKSPACE',title:'Что изменилось',note:'Новые наблюдения и изменения относительно предыдущей сборки данных.',columns:[]},
@@ -292,6 +306,17 @@ const DASH = /*__DATA__*/;
   function download(filename,text,type){const url=URL.createObjectURL(new Blob([text],{type}));const a=document.createElement('a');a.href=url;a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   function downloadPNG(chart,panel,overlay){const plot=chart.takeScreenshot();const image=document.createElement('canvas'),ratio=devicePixelRatio||1,head=38*ratio,foot=23*ratio;image.width=plot.width;image.height=plot.height+head+foot;const ctx=image.getContext('2d');ctx.fillStyle='#101720';ctx.fillRect(0,0,image.width,image.height);ctx.fillStyle='#d9e5ee';ctx.font=(13*ratio)+'px Segoe UI';ctx.fillText(panel.title,12*ratio,24*ratio);ctx.drawImage(plot,0,head);if(overlay)ctx.drawImage(overlay,0,head,plot.width,plot.height);ctx.fillStyle='#819bad';ctx.font=(9*ratio)+'px Segoe UI';ctx.fillText('Macroview · сборка '+DASH.generated+' · TradingView Lightweight Charts',12*ratio,image.height-8*ratio);image.toBlob(blob=>{if(blob)download(panel.id+'.png',blob,'image/png');},'image/png');}
   function openSource(panel){const host=document.getElementById('source-content');host.replaceChildren();const h=document.createElement('h2');h.textContent=panel.title;host.appendChild(h);const sub=document.createElement('p');sub.textContent=panel.sub||'Формула и описание показателя';host.appendChild(sub);
+    const todayIndex=PAGES.findIndex(entry=>entry.kind==='marketToday');
+    if(panel.id==='stress'&&todayIndex>=0){
+      const controls=document.createElement('div');controls.className='research-controls';
+      const button=document.createElement('button');button.type='button';button.textContent='Показать вклад компонентов';
+      button.onclick=()=>{
+        document.getElementById('source-dialog').close();
+        navigate(todayIndex);
+        document.getElementById('stress-breakdown')?.scrollIntoView({block:'start'});
+      };
+      controls.appendChild(button);host.appendChild(controls);
+    }
     for(const source of panel.sources||[]){const item=document.createElement('div');item.className='source-item';const a=document.createElement('a');a.textContent=source.provider+' · '+source.id;a.href=source.url;a.target='_blank';a.rel='noopener';item.appendChild(a);for(const line of ['Частота: '+source.frequency,'Наблюдение: '+(source.asof||panel.series[0]?.asof||'нет данных'),'Кэш сохранён: '+(source.cached?new Date(source.cached).toLocaleString('ru-RU',{timeZone:'Europe/Moscow'})+' МСК':'нет сведений')]){const p=document.createElement('p');p.textContent=line;item.appendChild(p);}host.appendChild(item);}
     const note=document.createElement('p');note.textContent='Дата наблюдения относится к статистическому периоду. Время сохранения кэша и время сборки страницы не равны дате публикации.';host.appendChild(note);document.getElementById('source-dialog').showModal();}
   document.querySelector('#source-dialog .dialog-close').onclick=()=>document.getElementById('source-dialog').close();
@@ -330,7 +355,7 @@ const DASH = /*__DATA__*/;
     document.getElementById('workspace-family').textContent=entry.family+' / MARKET RESEARCH';
     document.getElementById('workspace-note').textContent=entry.note||'Наблюдения публичных источников. Дата каждого ряда показана в таблице ниже.';
     const ready=panels.filter(p=>p.series.some(s=>s.data?.length)).length;
-    document.getElementById('workspace-badge').textContent=entry.kind==='compare'?'Общие даты':entry.kind==='changes'?'Сравнение снимков':entry.kind==='quality'?'Контроль данных':ready+' / '+panels.length+' панелей с данными';
+    document.getElementById('workspace-badge').textContent=entry.kind==='marketToday'?'Сборка · '+DASH.generated:entry.kind==='compare'?'Общие даты':entry.kind==='changes'?'Сравнение снимков':entry.kind==='quality'?'Контроль данных':ready+' / '+panels.length+' панелей с данными';
     document.getElementById('page-title').textContent='Графики · '+panels.length;
     const metrics=document.getElementById('metrics');metrics.replaceChildren();
     panels.slice(0,4).forEach(p=>{const s=p.series[0],card=document.createElement('article');card.className='metric';
@@ -348,9 +373,80 @@ const DASH = /*__DATA__*/;
   function renderSpecial(kind){
     const host=document.getElementById('workspace-special');host.replaceChildren();if(specialChart){specialChart.remove();specialChart=null;}
     const card=document.createElement('div');card.className='research-card';host.appendChild(card);
-    function heading(text,note){const h=document.createElement('h3');h.textContent=text;card.appendChild(h);if(note){const p=document.createElement('p');p.textContent=note;card.appendChild(p);}}
+    function heading(text,note){const h=document.createElement('h3');h.textContent=text;card.appendChild(h);if(note){const p=document.createElement('p');p.textContent=note;card.appendChild(p);}return h;}
     function table(headers){const wrap=document.createElement('div');wrap.className='research-table-wrap';const t=document.createElement('table');t.className='research-table';const head=document.createElement('thead'),tr=document.createElement('tr');for(const h of headers){const th=document.createElement('th');th.textContent=h;tr.appendChild(th);}head.appendChild(tr);t.appendChild(head);const body=document.createElement('tbody');t.appendChild(body);wrap.appendChild(t);card.appendChild(wrap);return body;}
-    function row(body,values,panel){const tr=document.createElement('tr');values.forEach((v,i)=>{const td=document.createElement('td');if(i===0&&panel){const b=document.createElement('button');b.textContent=v;b.onclick=()=>openSource(panel);td.appendChild(b);}else td.textContent=v??'—';tr.appendChild(td);});body.appendChild(tr);return tr;}
+    function row(body,values,panel,action=openSource){const tr=document.createElement('tr');values.forEach((v,i)=>{const td=document.createElement('td');if(i===0&&panel){const b=document.createElement('button');b.textContent=v;b.onclick=()=>action(panel);td.appendChild(b);}else td.textContent=v??'—';tr.appendChild(td);});body.appendChild(tr);return tr;}
+    if(kind==='marketToday'){
+      const entry=PAGES[page];
+      const breakdown=panelIndex.get('stress')?.breakdown;
+      const panelIds=['nasdaq-breadth',...entry.metrics.map(metric=>metric.panel),
+        ...entry.sectors.map(sector=>sector.panel),'stress'];
+      PANELS.push(...panelIds.map(id=>panelIndex.get(id)).filter(p=>p?.series.some(s=>s.data.length)));
+      const chartFor=id=>PANELS.find(p=>p.id===id);
+      const showChart=panel=>openModal(PANELS.indexOf(panel));
+      const format=(value,unit='',signed=false)=>Number.isFinite(value)
+        ? (signed&&value>0?'+':'')+fmtNum(value)+unit : '—';
+      const count=value=>new Intl.NumberFormat('ru-RU').format(value);
+      const classFor=value=>value>0?'today-up':value<0?'today-down':'';
+      const cards=document.createElement('div');cards.className='today-cards';
+      function metric(title,value,detail,stamp,panelId,moveClass=''){
+        const button=document.createElement('button');
+        button.type='button';button.className='today-metric';
+        const panel=chartFor(panelId);
+        button.disabled=!panel;
+        if(panel)button.onclick=()=>showChart(panel);
+        for(const [tag,content,cls] of [
+          ['span',title,''],['strong',value,''],['span',detail,'today-move '+moveClass],['small',stamp,''],
+        ]){
+          if(!content)continue;
+          const el=document.createElement(tag);el.textContent=content;el.className=cls;button.appendChild(el);
+        }
+        cards.appendChild(button);
+      }
+      heading('Рынок США',entry.session?'Последняя сессия S&P 500 · '+entry.session:'Последняя сессия S&P 500 недоступна');
+      for(const item of entry.metrics){
+        const detail=item.previousDate?'Δ '+format(item.delta,item.changeUnit,true)+' к '+item.previousDate:'';
+        metric(item.title,format(item.value,item.unit),detail,item.date||'Нет наблюдений',item.panel,
+          item.marketSession?classFor(item.delta):'');
+      }
+      const breadth=entry.breadth;
+      const counts=breadth.counts;
+      metric('Выросли · Nasdaq',format(breadth.share,'%'),breadth.date
+        ? '↑ '+count(counts.Advances)+' · ↓ '+count(counts.Declines)+' · = '+count(counts.Unchanged) : '',
+        breadth.date||'Нет наблюдений','nasdaq-breadth');
+      card.appendChild(cards);
+
+      heading('Секторы США', 'Изменение цены ETF между двумя последними сессиями S&P 500. При отсутствии одной из цен показан пропуск.').classList.add('today-heading');
+      const sectors=table(['Секторный ETF','Изменение, %']);
+      for(const sector of entry.sectors){
+        const tr=row(sectors,[sector.title,format(sector.delta,'%',true)],chartFor(sector.panel),showChart);
+        const direction=classFor(sector.delta);
+        if(direction)tr.lastElementChild.classList.add(direction);
+      }
+
+      const stressHeading=heading('Из чего сложился индекс стресса', 'Вклад каждого компонента равен его z-score, делённому на число включённых компонентов. Столбец Δ показывает, как изменился вклад с предыдущего значения индекса.');
+      stressHeading.id='stress-breakdown';stressHeading.classList.add('today-heading');
+      if(!breakdown?.date){
+        const unavailable=document.createElement('p');unavailable.textContent='Композит недоступен.';card.appendChild(unavailable);
+      }else{
+        const stamp=document.createElement('p');stamp.className='today-stress';
+        const chart=chartFor('stress');
+        const value=document.createElement(chart?'button':'span');
+        value.textContent='Индекс '+format(breakdown.value,'',true)+' · '+breakdown.date;
+        if(chart){value.type='button';value.className='today-metric';value.onclick=()=>showChart(chart);}
+        stamp.appendChild(value);
+        if(breakdown.previousDate)stamp.append(' Δ '+format(breakdown.delta,'',true)+' к '+breakdown.previousDate);
+        card.appendChild(stamp);
+      }
+      const components=table(['Компонент','Наблюдение','Z-score','Вклад','Δ вклада']);
+      const componentPanels={'VIX':'vix','MOVE':'move','HY OAS':'today-hy-oas','NFCI':'nfci','STLFSI':'today-stlfsi'};
+      for(const item of breakdown?.rows||[]){
+        row(components,[item.label,item.date,format(item.z,'',true),
+          item.excluded||format(item.contribution,'',true),format(item.delta,'',true)],
+          chartFor(componentPanels[item.label]),showChart);
+      }
+      return;
+    }
     if(kind==='changes'){
       const changes=DASH.changes||{rows:[]};heading('Изменения между сборками',changes.note||'Для сравнения нужны две сборки данных.');
       const stamp=document.createElement('p');stamp.textContent='Базовая сборка: '+(changes.previous||'первый снимок')+' · Текущий снимок: '+(changes.current||DASH.generated);card.appendChild(stamp);
@@ -567,9 +663,9 @@ const DASH = /*__DATA__*/;
   refreshFavorites();updateLinkButton();
   const entry=PAGES[page],special=entry.kind&&entry.kind!=='favorites';
   document.getElementById('metrics').hidden=!!special;document.querySelector('.data-monitor').hidden=!!special;document.getElementById('workspace-special').hidden=!special;grid.hidden=!!special;
-  document.querySelector('.toolbar').style.display=['changes','quality'].includes(entry.kind)?'none':'';
+  document.querySelector('.toolbar').style.display=['changes','quality','marketToday'].includes(entry.kind)?'none':'';
   document.querySelectorAll('.toolbar [data-tf]').forEach(b=>b.style.display=entry.kind==='compare'?'none':'');
-  grid.innerHTML='';grid.classList.toggle('markets',page===1);
+  grid.innerHTML='';grid.classList.toggle('markets',entry.id==='markets');
   updateWorkspace();
   if(special){renderSpecial(entry.kind);return;}
   if(entry.kind==='favorites'&&!entry.columns.length){grid.innerHTML='<div class="research-empty"><strong>Ваш личный рабочий экран</strong>Нажмите ★ на нужных графиках — они появятся здесь.</div>';return;}

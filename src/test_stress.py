@@ -53,6 +53,21 @@ class StressTests(unittest.TestCase):
         self.assertTrue(any('MOVE' in item for item in dropped))
         self.assertFalse(result.empty)
 
+    def test_breakdown_reconciles_with_index_and_weekly_observation(self):
+        latest = self.series.copy()
+        latest.iloc[-1] = 35
+        weekly = self.series.iloc[::5].iloc[:-1]
+        raw = {'VIXCLS': latest, 'NFCI': weekly}
+        frame, observations, excluded = D.stress_components(raw)
+        detail = D.stress_breakdown(frame, observations, excluded)
+        rows = {row['label']: row for row in detail['rows']}
+        index, _, _ = D.stress_composite(raw)
+        self.assertAlmostEqual(sum(row['contribution'] or 0 for row in rows.values()), index.iloc[-1])
+        self.assertAlmostEqual(sum(row['delta'] or 0 for row in rows.values()), index.diff().iloc[-1])
+        self.assertEqual(rows['NFCI']['date'], weekly.index[-1].strftime('%Y-%m-%d'))
+        self.assertEqual(rows['NFCI']['delta'], 0)
+        self.assertIsNone(rows['MOVE']['contribution'])
+
 
 if __name__ == '__main__':
     unittest.main()

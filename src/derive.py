@@ -309,36 +309,54 @@ def vix_series(raw: dict) -> pd.Series:
     return pd.concat([official, market.loc[market.index > official.index[-1]]])
 
 
-def stress_composite(raw: dict) -> tuple[pd.Series, list[str], list[str]]:
-    """
-    Композитный индекс стресса: средний z-score по доступным метрикам.
-
-    Возврат: (ряд, вошедшие, выброшенные). Раньше подпись под панелью всегда
-    перечисляла все пять метрик, даже если MOVE не загрузился, — а он падает
-    регулярно, запасного источника у него нет. Хуже другое: замороженный
-    компонент daily() протягивал вперёд, скользящее среднее продолжало ехать,
-    и мёртвый ряд давал дрейфующий z-score, тянувший весь индекс.
-    """
-    comps, used, dropped = [], [], []
+def stress_components(raw: dict):
+    components, observations, excluded = {}, {}, {}
     for sid, label in STRESS_PARTS.items():
-        s = raw.get(sid, pd.Series(dtype="float64"))
-        if sid == "VIXCLS":
-            s = vix_series(raw)
+        s = vix_series(raw) if sid == "VIXCLS" else raw.get(sid, pd.Series(dtype=float))
         stamp = asof(s)
+        observations[label] = stamp
         if stamp is None:
-            dropped.append(f"{label}: нет данных")
+            excluded[label] = "нет данных"
             continue
         if is_stale(s):
-            dropped.append(f"{label}: заморожен на {stamp.date()}")
+            excluded[label] = f"заморожен на {stamp.date()}"
             continue
         # Stop each component at its last observation before normalizing.
         # Extending a constant level would change its rolling z-score.
-        comps.append(z(daily(s).loc[:stamp]))
-        used.append(label)
-    if not comps:
-        return pd.Series(dtype="float64"), used, dropped
-    df = pd.concat(comps, axis=1, sort=True)
-    return df.ffill().mean(axis=1, skipna=True).dropna(), used, dropped
+        scores = z(daily(s).loc[:stamp]).dropna()
+        if scores.empty:
+            excluded[label] = "недостаточно данных для z-score"
+            continue
+        components[label] = scores
+    frame = pd.concat(components, axis=1, sort=True).ffill() if components else pd.DataFrame(dtype=float)
+    return frame, observations, excluded
+
+
+def stress_composite(raw: dict) -> tuple[pd.Series, list[str], list[str]]:
+    frame, _, excluded = stress_components(raw)
+    return frame.mean(axis=1), list(frame.columns), [f"{k}: {v}" for k, v in excluded.items()]
+
+
+def stress_breakdown(frame, observations, excluded):
+    last = frame.iloc[-1].dropna() if len(frame) else pd.Series(dtype=float)
+    previous = frame.iloc[-2].dropna() if len(frame) > 1 else pd.Series(dtype=float)
+    contributions = last / len(last)
+    prior = previous / len(previous)
+    rows = []
+    for label in STRESS_PARTS.values():
+        stamp = observations[label]
+        contribution = contributions.get(label)
+        delta = float(contribution - prior.get(label, 0)) if contribution is not None and len(previous) else None
+        rows.append(dict(
+            label=label, date=stamp.strftime("%Y-%m-%d") if stamp is not None else None,
+            z=float(last[label]) if label in last else None,
+            contribution=float(contribution) if contribution is not None else None,
+            delta=delta, excluded=excluded.get(label),
+        ))
+    return dict(date=frame.index[-1].strftime("%Y-%m-%d") if len(frame) else None,
+                previousDate=frame.index[-2].strftime("%Y-%m-%d") if len(frame) > 1 else None,
+                value=float(last.mean()) if len(last) else None,
+                delta=float(last.mean() - previous.mean()) if len(previous) else None, rows=rows)
 
 
 def fed_stance(raw: dict) -> pd.Series:
@@ -410,9 +428,9 @@ def build_panels(raw: dict) -> list[dict]:
     netliq = net_fed_liquidity(raw)
     gm2, gm2_parts, gm2_out = global_m2_usd(raw)
     cbtot, cb_parts, cb_out = cb_balance_usd(raw)
-    stress, stress_used, stress_out = stress_composite(raw)
-    stress_sources={label: vix_series(raw) if sid == "VIXCLS" else g(sid)
-                    for sid,label in STRESS_PARTS.items() if label in stress_used}
+    stress_frame, stress_observations, stress_excluded = stress_components(raw)
+    stress = stress_frame.mean(axis=1)
+    stress_used = list(stress_frame.columns)
     stress_stamp=asof(stress)
     stance = fed_stance(raw)
     rspx = real_spx_yoy(raw)
@@ -476,12 +494,15 @@ def build_panels(raw: dict) -> list[dict]:
                sub=("средний z по: " + ", ".join(stress_used) if stress_used else "нет компонентов")
                    + "; окно 1250 рабочих дней; недельные компоненты сохраняют последний z-score"
                    + "; красный > 0 — выше среднего, зелёный < 0 — ниже среднего"
-                   + " · даты: " + ", ".join(label + " " + asof(a).strftime("%Y-%m-%d") for label,a in stress_sources.items())
-                   + (" · выброшено: " + "; ".join(stress_out) if stress_out else "")),
+                   + " · даты и вклады в разделе «Рынок сегодня»"),
             _p("rrp",   "Reverse Repo (млрд $)",  [_s("RRP", g("RRPONTSYD"), "#4caf50", "area")], digits=0,
                sub="пик 2554 млрд в дек. 2022, сейчас опустошён — околонулевые значения тут настоящие"),
         ],
     }
+
+    next(panel for panel in col2["panels"] if panel["id"] == "stress")["breakdown"] = (
+        stress_breakdown(stress_frame, stress_observations, stress_excluded)
+    )
 
     col3 = {
         "title": "ЦИКЛ",

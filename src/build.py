@@ -24,6 +24,7 @@ import config as C          # noqa: E402
 import sources              # noqa: E402
 import derive               # noqa: E402
 import market               # noqa: E402
+import market_today         # noqa: E402
 import nvidia               # noqa: E402
 import catalogue            # noqa: E402
 import history              # noqa: E402
@@ -182,12 +183,14 @@ def main() -> int:
     if empty:
         print(f"  Пустые панели: {', '.join(empty)}")
 
+    workspaces = catalogue.build(raw, columns, markets)
+    today = market_today.build(raw, workspaces)
     payload = {
         "generated": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
         "displayStart": derive.DISPLAY_START,
         "columns": columns,
         "markets": markets,
-        "workspaces": catalogue.build(raw, columns, markets) + [nvidia.build()],
+        "workspaces": [today, *workspaces, nvidia.build()],
         "diagnostics": sources.DIAG,
     }
 
