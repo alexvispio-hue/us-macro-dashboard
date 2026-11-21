@@ -16,3 +16,24 @@ assert.ok(R.comparison([{name:'flat',data:specs[0].data.map(p=>({...p,value:2}))
 assert.ok(R.comparison(specs,'100','2025-01-02','2025-01-02').error);
 const csv=R.csv({series:[{name:'a,"quoted"',data:specs[0].data}]},{from:'2025-01-02',to:'2025-01-03'});assert.equal(csv.split('\r\n').length,3);assert.ok(csv.includes('"a,""quoted"""'));assert.ok(!csv.includes('2025-01-01'));
 console.log('OK: preferences, validation, order, common-date comparison, base100, percent, z-score, zero bases, CSV escaping');
+
+const trades=[
+  {time:'2026-11-17',low:100,high:164,open:110,close:140,volume:6400},
+  {time:'2026-11-18',low:120,high:120,open:120,close:120,volume:900},
+  {time:'2026-11-19',low:120,high:120,open:120,close:120,volume:10000},
+];
+const profile=R.volumeProfile(trades,'2026-11-17','2026-11-18');
+assert.equal(profile.pocPrice,120.5);
+assert.equal(profile.totals.reduce((sum,value)=>sum+value,0),7300);
+assert.ok(profile.totals.slice(profile.left,profile.right+1).reduce((sum,value)=>sum+value,0)>=7300*.7);
+const flat=R.volumeProfile(trades,'2026-11-19','2026-11-19');
+assert.equal(flat.pocPrice,120);
+assert.equal(flat.valueHigh,120);
+assert.equal(R.volumeProfile(trades,'2026-11-20','2026-11-20'),null);
+const closes=[{time:'2026-11-16',close:100},{time:'2026-11-17',close:90},{time:'2026-11-18',close:99}];
+const after=R.eventReaction(closes,{date:'2026-11-17',afterClose:true});
+assert.equal(after.first,'2026-11-18');
+assert.equal(after.prior,'2026-11-17');
+assert.ok(Math.abs(after.day-10)<1e-9);
+assert.equal(R.eventReaction(closes,{date:'2026-11-19',afterClose:false}),null);
+console.log('OK: anchored profile volume, POC and value area, after-close event reaction');

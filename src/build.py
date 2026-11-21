@@ -25,6 +25,7 @@ import sources              # noqa: E402
 import derive               # noqa: E402
 import market               # noqa: E402
 import market_today         # noqa: E402
+import event_calendar       # noqa: E402
 import nvidia               # noqa: E402
 import catalogue            # noqa: E402
 import history              # noqa: E402
@@ -192,6 +193,7 @@ def main() -> int:
         "columns": columns,
         "markets": markets,
         "workspaces": [today, *workspaces, nvidia.build()],
+        "calendar": event_calendar.build(),
         "diagnostics": sources.DIAG,
     }
 

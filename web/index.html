@@ -179,6 +179,32 @@
   .today-up{color:#6ed9bb}.today-down{color:#ff8e9c}
   .research-card .today-heading{margin-top:22px}
   .today-stress{font-variant-numeric:tabular-nums}
+  .today-desk{display:grid;grid-template-columns:minmax(172px,215px) minmax(0,1fr);gap:12px;align-items:stretch}
+  .today-picker,.today-viewer{min-width:0;border:1px solid var(--line);border-radius:8px;background:#101720}
+  .today-picker{padding:12px 10px;max-height:580px;overflow:auto}
+  .today-picker h4,.today-viewer h4{margin:0;font-size:13px;color:#e4eff7}
+  .today-picker h4{margin:0 6px 9px}
+  .today-picker .today-group{display:block;margin:12px 6px 4px;font-size:10px;color:#91a8bc}
+  .today-choice,.today-chart-tools button{font:inherit;color:#b9cfdf;background:transparent;border:1px solid transparent;border-radius:5px;cursor:pointer}
+  .today-choice{display:block;width:100%;padding:6px;text-align:left;font-size:11px}
+  .today-choice:hover,.today-choice:focus-visible,.today-chart-tools button:hover{border-color:#4b6379}
+  .today-choice[aria-pressed="true"],.today-chart-tools button.on{background:#203344;border-color:#496478;color:#e7f6ff}
+  .today-sector-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin:0 7px 1px 0;background:var(--sector)}
+  .today-viewer{display:flex;flex-direction:column;overflow:hidden}
+  .today-viewer-head{display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between;align-items:center;padding:11px 13px;border-bottom:1px solid var(--line)}
+  .today-chart-tools{display:flex;gap:3px;flex-wrap:wrap}
+  .today-chart-tools button{padding:4px 7px;font-size:10px;border-color:#283746}
+  .today-readout{padding:7px 13px;min-height:27px}
+  .today-plot{position:relative;min-height:340px;height:min(53vh,465px);flex:1}
+  .today-sector-row>td:first-child{border-left:2px solid var(--sector)}
+  .today-sector-row>td:first-child button{color:var(--sector)}
+  .research-table .today-up{color:#6ed9bb}.research-table .today-down{color:#ff8e9c}
+  .profile-controls{display:flex;flex-wrap:wrap;align-items:center;gap:6px 11px;padding:7px 12px;background:#14212d;color:#b9cfdf;font-size:11px}
+  .profile-controls label{display:flex;align-items:center;gap:5px}
+  .profile-controls input,.profile-controls button{color:inherit;background:#111b25;border:1px solid #3b5064;border-radius:4px;padding:4px;font:inherit;color-scheme:dark}
+  .profile-controls button{cursor:pointer}
+  .profile-status{flex-basis:100%;min-height:1.2em;font-variant-numeric:tabular-nums}
+  @media(max-width:720px){.today-desk{grid-template-columns:minmax(0,1fr)}.today-picker{max-height:164px}.today-plot{min-height:280px;height:46vh}}
   @media(max-width:480px){.today-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 </style>
@@ -294,7 +320,13 @@ const DASH = /*__DATA__*/;
     {id:'changes',kind:'changes',family:'WORKSPACE',title:'Что изменилось',note:'Новые наблюдения и изменения относительно предыдущей сборки данных.',columns:[]},
     {id:'quality',kind:'quality',family:'WORKSPACE',title:'Данные и источники',note:'Даты наблюдений, полнота рядов, резервный кэш и ссылки на первоисточники.',columns:[]});
   page=Math.max(0,PAGES.findIndex(p=>p.id===settings.page));timeframe=settings.timeframe;
-  let specialChart=null,noticeTimer=null,saveTimer=null,groupSyncOn=false,storageWarning=false;
+  let specialChart=null,specialCleanup=null,noticeTimer=null,saveTimer=null,groupSyncOn=false,storageWarning=false;
+  const todayRanges=new Map();
+  let todayGraph=null;
+  function disposeSpecialChart(){
+    specialCleanup?.();specialCleanup=null;
+    specialChart?.remove();specialChart=null;todayGraph=null;
+  }
   const linkedIds=new Set(settings.linked);
   function notice(text){const host=document.getElementById('notice');host.textContent=text;host.classList.add('show');clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>host.classList.remove('show'),2800);}
   function persist(){settings.ranges=Object.fromEntries(panelRanges);settings.linked=[...linkedIds];settings.timeframe=timeframe;settings.page=PAGES[page].id;if(!R.save(storage,settings)&&!storageWarning){storageWarning=true;notice('Браузер запретил сохранение настроек. Изменения доступны только до закрытия страницы.');}}
@@ -371,7 +403,7 @@ const DASH = /*__DATA__*/;
     renderNav(document.getElementById('workspace-search').value);
   }
   function renderSpecial(kind){
-    const host=document.getElementById('workspace-special');host.replaceChildren();if(specialChart){specialChart.remove();specialChart=null;}
+    const host=document.getElementById('workspace-special');disposeSpecialChart();host.replaceChildren();
     const card=document.createElement('div');card.className='research-card';host.appendChild(card);
     function heading(text,note){const h=document.createElement('h3');h.textContent=text;card.appendChild(h);if(note){const p=document.createElement('p');p.textContent=note;card.appendChild(p);}return h;}
     function table(headers){const wrap=document.createElement('div');wrap.className='research-table-wrap';const t=document.createElement('table');t.className='research-table';const head=document.createElement('thead'),tr=document.createElement('tr');for(const h of headers){const th=document.createElement('th');th.textContent=h;tr.appendChild(th);}head.appendChild(tr);t.appendChild(head);const body=document.createElement('tbody');t.appendChild(body);wrap.appendChild(t);card.appendChild(wrap);return body;}
@@ -379,11 +411,81 @@ const DASH = /*__DATA__*/;
     if(kind==='marketToday'){
       const entry=PAGES[page];
       const breakdown=panelIndex.get('stress')?.breakdown;
-      const panelIds=['nasdaq-breadth',...entry.metrics.map(metric=>metric.panel),
+      const panelIds=['nasdaq-breadth','nvda-price',...entry.metrics.map(metric=>metric.panel),
         ...entry.sectors.map(sector=>sector.panel),'stress'];
       PANELS.push(...panelIds.map(id=>panelIndex.get(id)).filter(p=>p?.series.some(s=>s.data.length)));
       const chartFor=id=>PANELS.find(p=>p.id===id);
-      const showChart=panel=>openModal(PANELS.indexOf(panel));
+      const sectorColors={XLP:'#67d9ad',XLV:'#a0cade',XLE:'#f4ac66',XLU:'#e9d477',XLRE:'#d0a0ef',XLF:'#89aaff',
+        XLB:'#d8a188',XLC:'#f0a1c3',XLY:'#e7bd8e',XLI:'#a7cf7d',XLK:'#59cfef'};
+      const colors=new Map(entry.sectors.map(sector=>[sector.panel,sectorColors[sector.ticker]]));
+      const desk=document.createElement('div');desk.className='today-desk';
+      const picker=document.createElement('nav');picker.className='today-picker';picker.setAttribute('aria-label','Графики рынка сегодня');
+      const pickerTitle=document.createElement('h4');pickerTitle.textContent='Графики';picker.appendChild(pickerTitle);
+      const viewer=document.createElement('section');viewer.className='today-viewer';viewer.setAttribute('aria-label','Выбранный график');
+      desk.append(picker,viewer);
+      const choices=new Map();
+      function showChart(panel,scroll=false){
+        if(todayGraph?.panel.id===panel.id){
+          if(scroll)desk.scrollIntoView({block:'nearest'});
+          return;
+        }
+        disposeSpecialChart();
+        settings.todayPanel=panel.id;persist();
+        choices.forEach((button,id)=>button.setAttribute('aria-pressed',String(id===panel.id)));
+        const accent=colors.get(panel.id);
+        const spec=accent?{...panel,series:panel.series.map((s,i)=>i===0?{...s,color:accent}:s)}:panel;
+        viewer.replaceChildren();
+        const head=document.createElement('div');head.className='today-viewer-head';
+        const title=document.createElement('h4');title.textContent=spec.title;
+        if(accent)title.style.color=accent;
+        const tools=document.createElement('div');tools.className='today-chart-tools';
+        const readout=document.createElement('div');readout.className='today-readout';setReadout(readout,spec,null,true);
+        const plot=document.createElement('div');plot.className='today-plot';
+        head.append(title,tools);viewer.append(head,readout,plot);
+        const chart=LC.createChart(plot,baseOptions(true,spec,true));specialChart=chart;
+        const made=spec.series.filter(s=>s.data.length).map(s=>({spec:s,api:addSeries(chart,s,spec,true)}));
+        if(spec.zero&&made.length)made[0].api.createPriceLine({price:0,color:'#4a5160',lineWidth:1,lineStyle:2});
+        const profile=spec.profile?addProfileControls(spec,chart,plot):null;
+        const overlay=decorate(chart,plot,spec,made,profile?.readout);
+        if(profile)profile.redraw=overlay.redraw;
+        specialCleanup=overlay;
+        chart.subscribeCrosshairMove(({time})=>setReadout(readout,spec,time||null,true));
+        const setRange=range=>{
+          todayRanges.set(panel.id,range);chart.timeScale().setVisibleRange(range);
+        };
+        todayGraph={panel,setRange,made,chart,markers:null};
+        chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
+          if(range)todayRanges.set(panel.id,{from:isoFrom(range.from),to:isoFrom(range.to)});
+        });
+        const last=spec.series.reduce((date,s)=>s.asof>date?s.asof:date,'')||LAST_DATE;
+        const daysRange=days=>days
+          ? {from:iso(new Date(Date.parse(last)-days*86400000)),to:last}
+          : {from:spec.series.filter(s=>s.data.length).map(s=>s.data[0].time).sort()[0],to:last};
+        for(const [label,days] of [['1М',31],['3М',92],['1Г',365],['Всё',0]]){
+          const button=document.createElement('button');button.type='button';button.textContent=label;
+          button.onclick=()=>setRange(daysRange(days));tools.appendChild(button);
+        }
+        const source=document.createElement('button');source.type='button';source.textContent='Источник';
+        source.onclick=()=>openSource(panel);tools.appendChild(source);
+        setRange(todayRanges.get(panel.id)||daysRange(365));
+        if(scroll)desk.scrollIntoView({block:'nearest'});
+      }
+      for(const [label,ids] of [
+        ['Индексы и индикаторы',[...entry.metrics.map(metric=>metric.panel),'nasdaq-breadth','stress','nvda-price']],
+        ['Секторы США',entry.sectors.map(sector=>sector.panel)],
+      ]){
+        const group=document.createElement('span');group.className='today-group';group.textContent=label;picker.appendChild(group);
+        for(const id of ids){
+          const panel=chartFor(id);if(!panel)continue;
+          const button=document.createElement('button');button.type='button';button.className='today-choice';
+          if(colors.has(id)){
+            button.style.setProperty('--sector',colors.get(id));
+            const dot=document.createElement('span');dot.className='today-sector-dot';dot.setAttribute('aria-hidden','true');
+            button.appendChild(dot);
+          }
+          button.append(panel.title);button.onclick=()=>showChart(panel);picker.appendChild(button);choices.set(id,button);
+        }
+      }
       const format=(value,unit='',signed=false)=>Number.isFinite(value)
         ? (signed&&value>0?'+':'')+fmtNum(value)+unit : '—';
       const count=value=>new Intl.NumberFormat('ru-RU').format(value);
@@ -394,7 +496,7 @@ const DASH = /*__DATA__*/;
         button.type='button';button.className='today-metric';
         const panel=chartFor(panelId);
         button.disabled=!panel;
-        if(panel)button.onclick=()=>showChart(panel);
+        if(panel)button.onclick=()=>showChart(panel,true);
         for(const [tag,content,cls] of [
           ['span',title,''],['strong',value,''],['span',detail,'today-move '+moveClass],['small',stamp,''],
         ]){
@@ -415,14 +517,25 @@ const DASH = /*__DATA__*/;
         ? '↑ '+count(counts.Advances)+' · ↓ '+count(counts.Declines)+' · = '+count(counts.Unchanged) : '',
         breadth.date||'Нет наблюдений','nasdaq-breadth');
       card.appendChild(cards);
+      card.appendChild(desk);
+      const initial=chartFor(settings.todayPanel)||chartFor('today-spx')||PANELS[0];
+      if(initial)showChart(initial);
 
-      heading('Секторы США', 'Изменение цены ETF между двумя последними сессиями S&P 500. При отсутствии одной из цен показан пропуск.').classList.add('today-heading');
+      heading('Секторы США').classList.add('today-heading');
       const sectors=table(['Секторный ETF','Изменение, %']);
       for(const sector of entry.sectors){
-        const tr=row(sectors,[sector.title,format(sector.delta,'%',true)],chartFor(sector.panel),showChart);
+        const tr=row(sectors,[sector.title,format(sector.delta,'%',true)],chartFor(sector.panel),panel=>showChart(panel,true));
+        tr.classList.add('today-sector-row');tr.style.setProperty('--sector',colors.get(sector.panel));
+        const button=tr.firstElementChild.querySelector('button');
+        if(button){
+          const dot=document.createElement('span');dot.className='today-sector-dot';dot.setAttribute('aria-hidden','true');button.prepend(dot);
+        }
         const direction=classFor(sector.delta);
         if(direction)tr.lastElementChild.classList.add(direction);
       }
+      const sectorNote=document.createElement('p');
+      sectorNote.textContent='Изменение цены ETF между двумя последними сессиями S&P 500. При отсутствии одной из цен показан пропуск.';
+      card.appendChild(sectorNote);
 
       const stressHeading=heading('Из чего сложился индекс стресса', 'Вклад каждого компонента равен его z-score, делённому на число включённых компонентов. Столбец Δ показывает, как изменился вклад с предыдущего значения индекса.');
       stressHeading.id='stress-breakdown';stressHeading.classList.add('today-heading');
@@ -433,7 +546,7 @@ const DASH = /*__DATA__*/;
         const chart=chartFor('stress');
         const value=document.createElement(chart?'button':'span');
         value.textContent='Индекс '+format(breakdown.value,'',true)+' · '+breakdown.date;
-        if(chart){value.type='button';value.className='today-metric';value.onclick=()=>showChart(chart);}
+        if(chart){value.type='button';value.className='today-metric';value.onclick=()=>showChart(chart,true);}
         stamp.appendChild(value);
         if(breakdown.previousDate)stamp.append(' Δ '+format(breakdown.delta,'',true)+' к '+breakdown.previousDate);
         card.appendChild(stamp);
@@ -443,7 +556,53 @@ const DASH = /*__DATA__*/;
       for(const item of breakdown?.rows||[]){
         row(components,[item.label,item.date,format(item.z,'',true),
           item.excluded||format(item.contribution,'',true),format(item.delta,'',true)],
-          chartFor(componentPanels[item.label]),showChart);
+          chartFor(componentPanels[item.label]),panel=>showChart(panel,true));
+      }
+      const eventTitle=heading('Календарь событий', 'Изменение цены за пять сессий до события и реакция к закрытию первой и пятой сессий. Для отчётов после закрытия реакция отсчитывается со следующей сессии.');
+      eventTitle.classList.add('today-heading');
+      const calendar=DASH.calendar;
+      if(calendar?.events.length){
+        const controls=document.createElement('div');controls.className='research-controls';
+        const filter=document.createElement('select');filter.setAttribute('aria-label','Категория событий');
+        for(const [value,label] of [['all','Все события'],['fed','ФРС'],['cpi','Инфляция'],['jobs','Занятость'],['nvda','NVIDIA']]){
+          const option=document.createElement('option');option.value=value;option.textContent=label;filter.appendChild(option);
+        }
+        controls.appendChild(filter);card.appendChild(controls);
+        const eventRows=table(['Событие','Дата','Статус','5 сессий до','1-я сессия','5-я сессия','Источник']);
+        function renderEvents(){
+          eventRows.replaceChildren();
+          const matching=calendar.events.filter(event=>filter.value==='all'||event.kind===filter.value);
+          const upcoming=matching.filter(event=>event.date>calendar.asof).slice(0,6);
+          const history=matching.filter(event=>event.date<=calendar.asof).reverse().slice(0,10);
+          for(const event of [...upcoming,...history]){
+            const panel=chartFor(event.kind==='nvda'?'nvda-price':'today-spx');
+            const reaction=event.date<=calendar.asof&&panel?R.eventReaction(panel.series[0].data,event):null;
+            const status=event.date>calendar.asof?'Запланировано':event.date===calendar.asof?'Сегодня':'Прошло';
+            const tr=row(eventRows,[event.title,event.date,status,
+              format(reaction?.before,'%',true),format(reaction?.day,'%',true),format(reaction?.week,'%',true),''],
+              reaction?panel:null,target=>{
+                showChart(target,true);
+                const from=iso(new Date(Date.parse(event.date)-30*86400000));
+                const to=iso(new Date(Date.parse(event.date)+35*86400000));
+                todayGraph.setRange({from,to});
+                todayGraph.markers?.detach();
+                if(typeof LC.createSeriesMarkers==='function'){
+                  const time=dataFor(todayGraph.made[0].spec).find(point=>point.time>=reaction.first)?.time;
+                  const markerTime=timeframe==='W'
+                    ? dataFor(todayGraph.made[0].spec).findLast(point=>point.time<=reaction.first)?.time : time;
+                  if(markerTime)todayGraph.markers=LC.createSeriesMarkers(todayGraph.made[0].api,[
+                    {time:markerTime,position:'aboveBar',shape:'circle',color:'#e8c47a',text:event.title},
+                  ]);
+                }
+              });
+            const source=document.createElement('a');source.href=event.url;source.target='_blank';source.rel='noopener';
+            source.textContent='Публикация';tr.lastElementChild.appendChild(source);
+          }
+          if(!upcoming.length&&!history.length)row(eventRows,['Нет подтверждённых дат']);
+        }
+        filter.onchange=renderEvents;renderEvents();
+      }else{
+        const empty=document.createElement('p');empty.textContent='Нет дат от источников.';card.appendChild(empty);
       }
       return;
     }
@@ -661,7 +820,7 @@ const DASH = /*__DATA__*/;
   function renderColumns() {
   holdSync();
   charts.forEach(o=>{o.cleanup?.();o.chart.remove();});charts.length=0;PANELS.length=0;
-  if(specialChart){specialChart.remove();specialChart=null;}
+  disposeSpecialChart();
   refreshFavorites();updateLinkButton();
   const entry=PAGES[page],special=entry.kind&&entry.kind!=='favorites';
   document.getElementById('metrics').hidden=!!special;document.querySelector('.data-monitor').hidden=!!special;document.getElementById('workspace-special').hidden=!special;grid.hidden=!!special;
@@ -883,6 +1042,7 @@ const DASH = /*__DATA__*/;
     holdSync();
     saveSoon();
     if(PAGES[page].kind==='compare'){renderSpecial('compare');return;}
+    if(PAGES[page].kind==='marketToday'){todayGraph?.setRange(r);return;}
     charts.forEach(o => { rememberRange(o.panel,r);try { o.chart.timeScale().setVisibleRange(r); } catch (e) {} });
   }
 
@@ -962,7 +1122,13 @@ const DASH = /*__DATA__*/;
       setReadout(mval, panel, param.time || null, true);
     });
 
-    m = { chart, series: made, panel, idx, log: false, cleanup:decorate(chart,plot,panel,made) };
+    const profile=panel.profile?addProfileControls(panel,chart,mchart):null;
+    const overlay=decorate(chart,plot,panel,made,profile?.readout);
+    if(profile)profile.redraw=overlay.redraw;
+    m = { chart, series: made, panel, idx, log: false, cleanup:()=>{
+      overlay();profile?.element.remove();
+    }};
+    m.cleanup.redraw=overlay.redraw;
     document.getElementById("mlog").classList.remove("on");
     try { chart.timeScale().setVisibleRange(savedOrDefaultRange(panel)); } catch (e) {}
     markModalRange(null);
@@ -1052,14 +1218,64 @@ const DASH = /*__DATA__*/;
     if(oldIdx!==undefined){openModal(oldIdx);if(oldRange)m.chart.timeScale().setVisibleRange(oldRange);}
   });
 
+  function addProfileControls(panel,chart,before){
+    const element=document.createElement('div');element.className='profile-controls';
+    const status=document.createElement('div');status.className='profile-status';status.setAttribute('aria-live','polite');
+    const saved=settings.profiles[panel.id];
+    function dateField(label,value){
+      const wrapper=document.createElement('label');wrapper.textContent=label;
+      const input=document.createElement('input');input.type='date';input.value=value||'';
+      wrapper.appendChild(input);element.appendChild(wrapper);return input;
+    }
+    const from=dateField('Профиль с',saved?.from),to=dateField('по',saved?.to);
+    function button(text,activate){
+      const btn=document.createElement('button');btn.type='button';btn.textContent=text;btn.onclick=activate;element.appendChild(btn);
+    }
+    function visible(){
+      const range=chart.timeScale().getVisibleRange();
+      if(!range)return null;
+      const start=isoFrom(range.from),end=isoFrom(range.to);
+      return {from:start,to:timeframe==='W'?iso(new Date(Date.parse(end)+6*86400000)):end};
+    }
+    const api={element,redraw:null,readout(profile){
+      const fixed=settings.profiles[panel.id];
+      if(!profile){status.textContent='Нет сделок в выбранном диапазоне.';return;}
+      const last=panel.series[0].data.at(-1)?.close;
+      const distance=Number.isFinite(last)&&profile.pocPrice>0?(last/profile.pocPrice-1)*100:null;
+      const price=value=>fmtNum(value);
+      status.textContent=(fixed?'Закреплён · ':'Видимый диапазон · ')+profile.from+' — '+profile.to
+        +' · POC '+price(profile.pocPrice)+' · Зона 70% '+price(profile.valueLow)+'–'+price(profile.valueHigh)
+        +(distance===null?'':' · Последняя цена к POC '+(distance>0?'+':'')+distance.toFixed(2)+'%');
+    }};
+    function pin(range){
+      if(!range?.from||!range?.to||range.from>range.to){notice('Укажи обе даты в порядке от ранней к поздней.');return;}
+      from.value=range.from;to.value=range.to;
+      settings.profiles[panel.id]=range;persist();api.redraw?.();
+    }
+    button('Закрепить даты',()=>pin({from:from.value,to:to.value}));
+    button('Закрепить видимое',()=>pin(visible()));
+    if(panel.id==='nvda-price'){
+      const lastEvent=(DASH.calendar?.events||[]).findLast(event=>event.kind==='nvda'&&event.date<=DASH.calendar.asof);
+      const dates=panel.series[0].data;
+      const first=lastEvent&&dates.find(p=>lastEvent.afterClose?p.time>lastEvent.date:p.time>=lastEvent.date);
+      if(first)button('С последнего отчёта',()=>pin({from:first.time,to:dates.at(-1).time}));
+    }
+    button('По видимой области',()=>{
+      delete settings.profiles[panel.id];from.value='';to.value='';persist();api.redraw?.();
+    });
+    element.appendChild(status);before.before(element);
+    return api;
+  }
+
   // An overlay shares the chart's real price/time transforms, including log scale.
   // Volume is distributed uniformly across each daily bar's high-low range.
-  function decorate(chart,host,panel,made){
+  function decorate(chart,host,panel,made,onProfile){
     if(made[0]) for(const level of panel.levels || []) made[0].api.createPriceLine({price:level,color:'#b19c63',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:String(level)});
     if(!panel.profile && !panel.zones)return ()=>{};
     const canvas=document.createElement('canvas');canvas.className='overlay';host.appendChild(canvas);
     let scheduled=0,dead=false;
     let pointer=null;
+    let profileKey='',profile=null;
     function movePointer(event){
       if(panel.profileUnit){
         const rect=host.getBoundingClientRect();
@@ -1099,22 +1315,15 @@ const DASH = /*__DATA__*/;
       if(panel.profile){
         // Always use daily bars, so changing candle interval does not alter the profile.
         const end=timeframe==='W' ? iso(new Date(Date.parse(to)+6*86400000)) : to;
-        const bars=panel.series[0].data.filter(d=>d.time>=from && d.time<=end && d.volume>0);
-        if(bars.length){
-          const low=Math.min(...bars.map(d=>d.low)),high=Math.max(...bars.map(d=>d.high));
-          const n=64,step=(high-low || 1)/n,bins=Array.from({length:n},()=>({up:0,down:0}));
-          for(const b of bars){
-            const first=Math.max(0,Math.min(n-1,Math.floor((b.low-low)/step))),last=Math.max(first,Math.min(n-1,Math.floor((b.high-low)/step)));
-            for(let i=first;i<=last;i++){
-              const frac=b.high===b.low ? 1 : Math.max(0,Math.min(b.high,low+(i+1)*step)-Math.max(b.low,low+i*step))/(b.high-b.low);
-              bins[i][b.close>=b.open?'up':'down']+=b.volume*frac;
-            }
-          }
-          const totals=bins.map(b=>b.up+b.down),max=Math.max(...totals),poc=totals.indexOf(max);
-          const target=totals.reduce((a,b)=>a+b,0)*.7;let sum=totals[poc],left=poc,right=poc;
-          while(sum<target && (left>0 || right<n-1)){
-            if(right<n-1 && (left===0 || totals[right+1]>=totals[left-1]))sum+=totals[++right];else sum+=totals[--left];
-          }
+        const fixed=settings.profiles[panel.id];
+        const selection=fixed||{from,to:end};
+        const key=selection.from+'|'+selection.to+'|'+Boolean(fixed);
+        if(profileKey!==key){
+          profileKey=key;profile=R.volumeProfile(panel.series[0].data,selection.from,selection.to);
+          onProfile?.(profile);
+        }
+        if(profile){
+          const {low,step,bins,totals,max,poc,left,right,binFor,pocPrice}=profile;
           const width=Math.min(130,pw*.24),edge=pw-3;
           ctx.fillStyle='rgba(3,7,12,.30)';ctx.fillRect(edge-width-9,0,width+12,ph);
           bins.forEach((b,i)=>{
@@ -1123,15 +1332,15 @@ const DASH = /*__DATA__*/;
             ctx.fillStyle=va?'#b89db5':'#a38a38';ctx.fillRect(edge-down,y,down,bh);
             ctx.fillStyle=va?'#85adbe':'#147287';ctx.fillRect(edge-down-up,y,up,bh);
           });
-          const yp=api.priceToCoordinate(low+(poc+.5)*step);
+          const yp=api.priceToCoordinate(pocPrice);
           ctx.strokeStyle='#e2bd68';ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(edge-width,yp);ctx.lineTo(edge,yp);ctx.stroke();ctx.setLineDash([]);
-          ctx.font='10px Segoe UI';ctx.fillStyle='#e2bd68';ctx.fillText('POC '+fmtNum(low+(poc+.5)*step),edge-width,Math.max(70,yp-5));
-          ctx.fillStyle='#a6afbd';ctx.fillText('VP · оценка',edge-width,ph-8);
+          ctx.font='10px Segoe UI';ctx.fillStyle='#e2bd68';ctx.fillText('POC '+fmtNum(pocPrice),edge-width,Math.max(70,yp-5));
+          ctx.fillStyle='#a6afbd';ctx.fillText(fixed?'VP · закреплён':'VP · оценка',edge-width,ph-8);
           if(panel.profileUnit){
             const hovered=pointer && pointer.x>=edge-width && pointer.x<=pw && pointer.y>=0 && pointer.y<ph
               ? api.coordinateToPrice(pointer.y) : null;
-            const bin=hovered===null ? poc : Math.max(0,Math.min(n-1,Math.floor((hovered-low)/step)));
-            const center=fmtNum(high===low ? low : low+(bin+.5)*step);
+            const bin=hovered===null ? poc : binFor(hovered);
+            const center=fmtNum(low+(bin+.5)*step);
             const volume=new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(totals[bin]);
             const label=(hovered===null?'POC ':'')+'$'+center+' · '+volume+panel.profileUnit;
             const labelWidth=ctx.measureText(label).width+14;
