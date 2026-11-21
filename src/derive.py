@@ -404,7 +404,7 @@ def _p(pid, title, series, ptype="line", zero=False, height=1, sub=None, digits=
 
 
 def _s(name, s, color, ptype=None, digits=2, suffix="", scale="right",
-       invert=False, stamp=None, freshness_source=None):
+       invert=False, stamp=None, freshness_source=None, start=DISPLAY_START):
     """
     stamp — дата последнего НАСТОЯЩЕГО наблюдения. Для сырых рядов считается
     сама; для производных (они уже протянуты daily() до сегодня) её нужно
@@ -417,7 +417,7 @@ def _s(name, s, color, ptype=None, digits=2, suffix="", scale="right",
         "lastRaw": last_val(s),
         "asof": st.strftime("%Y-%m-%d") if st is not None else None,
         "stale": bool(is_stale(freshness_source if freshness_source is not None else s, st)),
-        "data": to_points(s),
+        "data": to_points(s, start=start),
     }
 
 

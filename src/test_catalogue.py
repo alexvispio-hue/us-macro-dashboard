@@ -36,6 +36,20 @@ class CatalogueTests(unittest.TestCase):
         row=self.panel(self.workspaces(raw),'broker-m2')['series'][0]
         self.assertEqual(row['lastRaw'],4)
         self.assertEqual(row['asof'],'2026-06-30')
+    def test_finra_ratio_matches_calendar_month_and_preserves_full_history(self):
+        raw = {
+            'FINRA_MARGIN': pd.Series([100_000., 200_000., 1_500_000.],
+                                     index=pd.to_datetime(['1997-01-31', '1997-02-28', '2026-09-30'])),
+            'M2SL': pd.Series([4_000., 5_000., 25_000.],
+                              index=pd.to_datetime(['1997-01-01', '1997-03-01', '2026-09-01'])),
+        }
+        panel = self.panel(self.workspaces(raw), 'finra-m2')
+        self.assertEqual(panel['series'][0]['data'], [
+            {'time': '1997-01-01', 'value': 2.5},
+            {'time': '2026-09-01', 'value': 6.0},
+        ])
+        self.assertEqual(panel['series'][0]['asof'], '2026-09-01')
+        self.assertTrue(panel['fullHistory'])
     def test_ids_are_unique_in_catalogue(self):
         ids=[p['id'] for w in self.workspaces({}).values() for c in w['columns'] for p in c['panels']]
         self.assertEqual(len(ids),len(set(ids)))

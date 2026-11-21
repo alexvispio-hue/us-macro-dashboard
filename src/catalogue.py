@@ -90,7 +90,19 @@ def build(raw, columns, markets):
     m2monthly=pd.Series(m2raw.to_numpy(),index=pd.DatetimeIndex(m2raw.index).to_period('M')).groupby(level=0).last()
     m2=pd.Series(m2monthly.reindex(receiv.index.to_period('M')).to_numpy(),index=receiv.index)
     broker_ratio=receiv/m2.replace(0,float('nan'))*100
-    section('broker','MACRO / USA','Брокерские требования / M2',[D._p('broker-m2','Broker receivables / US M2',[D._s('Доля, %',broker_ratio,COLORS[0],stamp=D.asof(broker_ratio),freshness_source=receiv)],sub='FRED Z.1 · требования к клиентам / M2 на конец квартала, %')], 'BOGZ1FL663067003Q: миллионы $ → миллиарды $. Включает прочие требования к клиентам; не равен FINRA margin debt.')
+    margin = g('FINRA_MARGIN').dropna().sort_index()
+    margin.index = pd.DatetimeIndex(margin.index).to_period('M').to_timestamp()
+    aligned_m2 = pd.Series(m2monthly.reindex(margin.index.to_period('M')).to_numpy(), index=margin.index)
+    margin_ratio = (margin / 1000).div(aligned_m2.where(aligned_m2.gt(0))).mul(100).dropna()
+    margin_panel = D._p('finra-m2', 'FINRA Margin Debt / M2',
+                        [D._s('FINRA / M2', margin_ratio, COLORS[0], 'area', suffix='%', start='1997-01-01')],
+                        sub='Дебетовые остатки маржинальных счетов FINRA / M2 США за тот же месяц, %')
+    margin_panel.update(source_ids=['FINRA_MARGIN', 'M2SL'], allowUnavailable=True, fullHistory=True)
+    broker = D._p('broker-m2', 'Broker receivables / US M2',
+                  [D._s('Доля, %', broker_ratio, COLORS[0], stamp=D.asof(broker_ratio), freshness_source=receiv)],
+                  sub='FRED Z.1 · требования к клиентам / M2 на конец квартала, %')
+    section('broker', 'MACRO / USA', 'Маржинальный долг / M2', [margin_panel, broker],
+            'FINRA публикует маржинальный долг ежемесячно. Квартальный ряд FRED Z.1 охватывает также прочие требования брокеров к клиентам.')
     section('gdp','MACRO / USA','ВВП',[p('gdp-level','Номинальный ВВП','GDP','трлн $',.001),p('realgdp','Реальный ВВП','GDPC1','трлн $ 2017',.001),p('gdp-growth','Реальный ВВП · QoQ SAAR','A191RL1Q225SBEA','%')])
     section('debt','MACRO / USA','Государственный долг',[p('debt-level','Федеральный долг США','GFDEBTN','трлн $',.000001),p('debt-gdp','Федеральный долг / ВВП','GFDEGDQ188S','%')])
     section('conditions','MACRO / USA','Финансовые условия',old('nfci','stress','risk','vix','move'))

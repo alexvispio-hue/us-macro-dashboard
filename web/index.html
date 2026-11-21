@@ -520,10 +520,10 @@ const DASH = /*__DATA__*/;
   }
   function restoreRanges(){
     holdSync();
-    charts.forEach(o=>{try{o.chart.timeScale().setVisibleRange(panelRanges.get(o.panel.id)||currentRange);}catch(e){}});
+    charts.forEach(o=>{try{o.chart.timeScale().setVisibleRange(savedOrDefaultRange(o.panel));}catch(e){}});
   }
   document.getElementById("meta").textContent =
-    "сборка " + DASH.generated + " · показ с " + DASH.displayStart;
+    "сборка " + DASH.generated;
 
   const failed = (DASH.diagnostics || []).filter(d => d.status === "fail" || d.status === "skip");
   const allSeries=[...new Map(PAGES.flatMap(p=>p.columns.flatMap(c=>c.panels.flatMap(p=>p.series))).map(s=>[s.name+'|'+s.asof,s])).values()];
@@ -552,15 +552,17 @@ const DASH = /*__DATA__*/;
   // Самая свежая дата во всём наборе. Диапазоны считаем от неё, а не от
   // "сегодня": часть рядов месячные и отстают, и на окне в неделю данные
   // просто уехали бы за левый край экрана.
-  const LAST_DATE = (function () {
-    let mx = DASH.displayStart;
+  const [FIRST_DATE, LAST_DATE] = (function () {
+    let mn = DASH.displayStart, mx = DASH.displayStart;
     [...DASH.columns,...(DASH.markets?.columns || []),...(DASH.workspaces||[]).flatMap(w=>w.columns)].forEach(c => c.panels.forEach(p => p.series.forEach(s => {
       if (s.data && s.data.length) {
+        const first = s.data[0].time;
+        if (first < mn) mn = first;
         const t = s.data[s.data.length - 1].time;
         if (t > mx) mx = t;
       }
     })));
-    return mx;
+    return [mn, mx];
 })();
 
 
@@ -865,8 +867,12 @@ const DASH = /*__DATA__*/;
     const to = new Date(LAST_DATE + "T00:00:00Z");
     const from = days
       ? new Date(to.getTime() - days * 86400000)
-      : new Date(DASH.displayStart + "T00:00:00Z");
+      : new Date(FIRST_DATE + "T00:00:00Z");
     return { from: iso(from), to: iso(to) };
+  }
+
+  function savedOrDefaultRange(panel) {
+    return panelRanges.get(panel.id) || (panel.fullHistory && !syncOn ? rangeFor(0) : currentRange);
   }
 
   // ---------------------------------------------------------------- диапазон
@@ -958,7 +964,7 @@ const DASH = /*__DATA__*/;
 
     m = { chart, series: made, panel, idx, log: false, cleanup:decorate(chart,plot,panel,made) };
     document.getElementById("mlog").classList.remove("on");
-    try { chart.timeScale().setVisibleRange(panelRanges.get(panel.id)||currentRange); } catch (e) {}
+    try { chart.timeScale().setVisibleRange(savedOrDefaultRange(panel)); } catch (e) {}
     markModalRange(null);
   }
 

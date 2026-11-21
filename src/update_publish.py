@@ -64,10 +64,10 @@ def preflight(fetch=False):
             raise UpdateError('На GitHub есть изменения, которых нет локально. Попросите Codex синхронизировать проект. Ничего не перезаписано.')
 
 def install_dependencies():
-    for name,minimum in [('pandas',(2,2)),('requests',(2,31))]:
+    for name,minimum in [('pandas',(2,2)),('requests',(2,31)),('openpyxl',(3,1,5))]:
         try:
             version=importlib.metadata.version(name)
-            numbers=tuple(int(n) for n in re.findall(r'\d+',version)[:2])
+            numbers=tuple(int(n) for n in re.findall(r'\d+',version)[:len(minimum)])
             if numbers<minimum:raise importlib.metadata.PackageNotFoundError(name)
         except importlib.metadata.PackageNotFoundError:
             print('Устанавливаю зависимости проекта...',flush=True)

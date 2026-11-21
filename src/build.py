@@ -94,6 +94,7 @@ def main() -> int:
     print("=" * 74)
     raw = sources.fetch_all()
     raw.update(catalogue.load(raw))
+    raw["FINRA_MARGIN"] = sources.fetch_finra_margin()
 
     ok = sum(1 for d in sources.DIAG if d["status"] in ("ok", "cache"))
     bad = [d for d in sources.DIAG if d["status"] in ("fail", "skip")]

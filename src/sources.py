@@ -96,7 +96,7 @@ def _save_bad(cache: Path, text: str) -> None:
         pass
 
 
-def _get(url: str, timeout: int = 60, retries: int = 3) -> str:
+def _get(url: str, timeout: int = 60, retries: int = 3, *, binary: bool = False) -> str | bytes:
     """GET с ретраями. Если хост уже признан мёртвым — сразу выходим, не ждём таймаут."""
     if OFFLINE:
         raise HostBlocked('offline: нет данных в кэше')
@@ -110,7 +110,7 @@ def _get(url: str, timeout: int = 60, retries: int = 3) -> str:
             r = SESSION.get(url, timeout=timeout)
             r.raise_for_status()
             HOST_FAILS[host] = 0
-            return r.text
+            return r.content if binary else r.text
         except NET_ERRORS as e:
             last = e
             HOST_FAILS[host] = HOST_FAILS.get(host, 0) + 1
@@ -136,9 +136,10 @@ def _fred_url(series_id: str) -> str:
     """
     key = fred_key()
     if key:
+        start = "1997-01-01" if series_id == "M2SL" else C.START_DATE
         return (f"https://api.stlouisfed.org/fred/series/observations"
                 f"?series_id={series_id}&api_key={key}&file_type=json"
-                f"&observation_start={C.START_DATE}&limit=100000")
+                f"&observation_start={start}&limit=100000")
     return f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
 
 
@@ -201,6 +202,50 @@ def fetch_fred(series_id: str) -> pd.Series:
         else:
             _log("FRED", series_id, "fail", f"{type(e).__name__}: {e}")
         return pd.Series(dtype="float64", name=series_id)
+
+
+FINRA_MARGIN_PAGE = "https://www.finra.org/rules-guidance/key-topics/margin-accounts/margin-statistics"
+FINRA_MARGIN_FILE = "https://www.finra.org/sites/default/files/2021-03/margin-statistics.xlsx"
+FINRA_MARGIN_CACHE = "finra_margin.xlsx"
+
+
+def _parse_finra_margin(contents: bytes) -> pd.Series:
+    column = "Debit Balances in Customers' Securities Margin Accounts"
+    rows = pd.read_excel(io.BytesIO(contents), sheet_name="Customer Margin Balances",
+                         usecols=["Year-Month", column], engine="openpyxl")
+    dates = pd.to_datetime(rows["Year-Month"].astype(str).str[:7], format="%Y-%m", errors="coerce")
+    values = pd.to_numeric(rows[column].astype(str).str.replace(",", "", regex=False), errors="coerce")
+    valid = dates.notna() & dates.le(pd.Timestamp(dt.date.today())) & values.gt(0) & values.lt(float("inf"))
+    result = pd.Series(values[valid].to_numpy(dtype=float), index=pd.DatetimeIndex(dates[valid]),
+                       name="FINRA_MARGIN")
+    return result[~result.index.duplicated(keep="first")].sort_index()
+
+
+def fetch_finra_margin() -> pd.Series:
+    cache = RAW / FINRA_MARGIN_CACHE
+    cached = pd.Series(dtype=float, name="FINRA_MARGIN")
+    if cache.is_file():
+        try:
+            cached = _parse_finra_margin(cache.read_bytes())
+        except Exception:  # An unreadable cache can be rebuilt from FINRA.
+            pass
+    if OFFLINE or (not cached.empty and _fresh(cache)):
+        return cached
+    try:
+        contents = _get(FINRA_MARGIN_FILE, timeout=20, retries=2, binary=True)
+        series = _parse_finra_margin(contents)
+        if series.empty or (not cached.empty and
+                            (series.index[-1] < cached.index[-1] or series.index[0] > cached.index[0])):
+            raise ValueError("Файл FINRA пуст или содержит меньше истории")
+        pending = cache.with_suffix(".tmp")
+        pending.write_bytes(contents)
+        pending.replace(cache)
+        _log("FINRA", "Margin debt", "ok", f"n={len(series)}  last={series.index[-1]:%Y-%m}")
+        return series
+    except Exception as exc:
+        detail = "Показан кэш" if not cached.empty else "Данные недоступны"
+        _log("FINRA", "Margin debt", "warning", f"{detail}. {exc}")
+        return cached
 
 
 # -------------------------------------------------------------------- Yahoo

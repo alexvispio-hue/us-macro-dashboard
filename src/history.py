@@ -54,6 +54,7 @@ def annotate(payload, raw):
                   'M2UK':('Bank of England','https://www.bankofengland.co.uk/statistics/money-and-credit','boe_M2UK.csv'),
                   'JP30Y':('Japan Ministry of Finance','https://www.mof.go.jp/english/policy/jgbs/reference/interest_rate/','jgb_cur.csv'),
                   'CFTC':('CFTC','https://www.cftc.gov/MarketReports/CommitmentsofTraders/index.htm','cot_gold.json'),
+                  'FINRA_MARGIN':('FINRA',sources.FINRA_MARGIN_PAGE,sources.FINRA_MARGIN_CACHE),
                 }.get(sid,('Public source','', ''))
                 cache=sources.RAW/filename
             cadence=float(pd.Series(series.index).diff().dt.days.dropna().median()) if len(series)>2 else None
