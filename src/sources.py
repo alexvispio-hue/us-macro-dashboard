@@ -160,7 +160,9 @@ def _parse_fred(series_id: str, text: str) -> pd.Series:
     s = s[~s.index.isna()].sort_index()
     s = s[~s.index.duplicated(keep="last")]
     s.name = series_id
-    return s.dropna()
+    # FRED can include scheduled values (for example IORB) in its response.
+    # Keep the raw response in cache, but only use dates that have begun.
+    return s.loc[:pd.Timestamp(dt.date.today())].dropna()
 
 
 def fetch_fred(series_id: str) -> pd.Series:
@@ -168,8 +170,9 @@ def fetch_fred(series_id: str) -> pd.Series:
     if _fresh(cache):
         try:
             s = _parse_fred(series_id, cache.read_text(encoding="utf-8", errors="replace"))
-            _log("FRED", series_id, "cache", f"n={len(s)}")
-            return s
+            if not s.empty:
+                _log("FRED", series_id, "cache", f"n={len(s)}")
+                return s
         except Exception:                                     # noqa: BLE001
             pass          # битый кэш не должен ронять сборку — идём в сеть
     try:
@@ -188,8 +191,9 @@ def fetch_fred(series_id: str) -> pd.Series:
         if cache.exists():
             try:
                 s = _parse_fred(series_id, cache.read_text(encoding="utf-8"))
-                _log("FRED", series_id, "cache", f"сеть упала, старый кэш n={len(s)}")
-                return s
+                if not s.empty:
+                    _log("FRED", series_id, "cache", f"сеть упала, старый кэш n={len(s)}")
+                    return s
             except Exception:                                 # noqa: BLE001
                 pass
         if isinstance(e, HostBlocked):

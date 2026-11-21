@@ -1,9 +1,41 @@
 import unittest
+import datetime as dt
+import json
+import sys
+from contextlib import redirect_stdout
+from io import StringIO
 from types import SimpleNamespace
 from unittest.mock import patch
+import sources
 import update_publish as U
 
 class UpdatePublishTests(unittest.TestCase):
+    def test_scheduled_fred_rows_do_not_enter_dashboard_before_their_date(self):
+        today = dt.date.today()
+        yesterday = (today - dt.timedelta(days=1)).isoformat()
+        tomorrow = (today + dt.timedelta(days=1)).isoformat()
+        observations = [
+            {'date': yesterday, 'value': '3.9'},
+            {'date': today.isoformat(), 'value': '3.8'},
+            {'date': tomorrow, 'value': '3.7'},
+        ]
+        api = json.dumps({'observations': observations})
+        csv = 'observation_date,IORB\n' + '\n'.join(
+            row['date'] + ',' + row['value'] for row in observations
+        )
+        for response in (api, csv):
+            with self.subTest(response=response):
+                series = sources._parse_fred('IORB', response)
+                self.assertEqual(series.index[-1].date(), today)
+                self.assertEqual(series.tolist(), [3.9, 3.8])
+
+    def test_failed_command_displays_stderr_and_reports_step(self):
+        console = StringIO()
+        with redirect_stdout(console), self.assertRaisesRegex(U.UpdateError, 'Аудит данных.*код 7'):
+            U.command([sys.executable, '-c', "import sys; print('row IORB', file=sys.stderr); sys.exit(7)"],
+                      step='Аудит данных')
+        self.assertIn('row IORB', console.getvalue())
+
     def test_cache_fallback_stops_publication(self):
         for status,detail in [('cache','сеть упала, старый кэш n=10'),('skip','offline')]:
             with self.assertRaises(U.UpdateError):U.validate_fallbacks({'diagnostics':[{'name':'GDP','status':status,'detail':detail}]})

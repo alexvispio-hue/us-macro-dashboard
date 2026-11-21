@@ -4,6 +4,8 @@ import argparse
 import datetime as dt
 import importlib.metadata
 import json
+import logging
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -13,15 +15,35 @@ import webbrowser
 ROOT=Path(__file__).resolve().parent.parent
 PUBLIC_FILES=('index.html','DATA_AUDIT.md','data/audit-report.json')
 SITE='https://alexvispio-hue.github.io/us-macro-dashboard/'
+LOG_PATH = ROOT / 'last_update.log'
+LOG = logging.getLogger(__name__)
 
 class UpdateError(RuntimeError):pass
 
-def command(args, capture=False, allowed=(0,)):
-    result=subprocess.run(args,cwd=ROOT,text=True,encoding='utf-8',errors='replace',
-        stdout=subprocess.PIPE if capture else None,stderr=subprocess.PIPE if capture else None)
+def command(args, capture=False, allowed=(0,), step=None):
+    step = step or ' '.join(args[:2])
+    LOG.info('Шаг %s. Команда %s', step, subprocess.list2cmdline(args))
+    options = dict(cwd=ROOT, encoding='utf-8', errors='replace',
+                   env={**os.environ, 'PYTHONUTF8': '1', 'PYTHONUNBUFFERED': '1'})
+    try:
+        if capture:
+            result = subprocess.run(args, capture_output=True, **options)
+            for output in (result.stdout, result.stderr):
+                if output.strip():
+                    LOG.info('%s', output.rstrip())
+        else:
+            with subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, **options) as process:
+                for line in process.stdout:
+                    print(line, end='', flush=True)
+                    LOG.info('%s', line.rstrip())
+                result = subprocess.CompletedProcess(args, process.wait())
+    except OSError as exc:
+        raise UpdateError(f'{step} — не удалось запустить команду. {exc}') from exc
+    LOG.info('Код завершения %s', result.returncode)
     if result.returncode not in allowed:
-        detail=(result.stderr or result.stdout or '').strip() if capture else ''
-        raise UpdateError('Команда завершилась с ошибкой: '+args[0]+(' · '+detail if detail else ''))
+        detail = (result.stderr or result.stdout or '').strip() if capture else ''
+        raise UpdateError(f'{step} — ошибка выполнения (код {result.returncode})'
+                          + (f'. {detail}' if detail else '. Причина указана выше.'))
     return result
 
 def git(*args,capture=True,allowed=(0,)):
@@ -49,7 +71,8 @@ def install_dependencies():
             if numbers<minimum:raise importlib.metadata.PackageNotFoundError(name)
         except importlib.metadata.PackageNotFoundError:
             print('Устанавливаю зависимости проекта...',flush=True)
-            command([sys.executable,'-m','pip','install','-r','requirements.txt'])
+            command([sys.executable,'-m','pip','install','-r','requirements.txt'],
+                    step='Установка зависимостей')
             return
 
 def validate_fallbacks(payload):
@@ -61,13 +84,14 @@ def validate_fallbacks(payload):
 def prepare(offline=False):
     install_dependencies()
     print('\n[1/4] Загрузка данных и сборка...',flush=True)
-    command([sys.executable,'src/build.py','--offline' if offline else '--refresh'])
+    command([sys.executable,'src/build.py','--offline' if offline else '--refresh'],
+            step='Загрузка и сборка дашборда')
     print('\n[2/4] Проверка данных...',flush=True)
-    command([sys.executable,'src/audit_data.py'])
+    command([sys.executable,'src/audit_data.py'], step='Аудит данных')
     payload=json.loads((ROOT/'data/dashboard.json').read_text(encoding='utf-8'))
     validate_fallbacks(payload)
     print('\n[3/4] Подготовка сайта и проверка ключей...',flush=True)
-    command([sys.executable,'src/package_site.py'])
+    command([sys.executable,'src/package_site.py'], step='Подготовка сайта')
 
 def publish():
     # Check again after the download: never include concurrently staged source edits.
@@ -107,14 +131,22 @@ def main(argv=None):
         print('\nГотово: обновление отправлено в GitHub. Развёртывание Pages обычно занимает несколько минут.')
         print('До завершения развёртывания сайт может показывать предыдущую сборку. Затем обновите страницу Ctrl+F5.')
         print(SITE)
-        if not args.no_open:webbrowser.open(SITE)
+        if not args.no_open:
+            try:
+                webbrowser.open(SITE)
+            except OSError as exc:
+                LOG.info('Не удалось открыть сайт в браузере. %s', exc)
         return 0
     except (UpdateError,OSError,ValueError) as exc:
+        LOG.info('Обновление остановлено. %s', exc)
         print('\nОБНОВЛЕНИЕ ОСТАНОВЛЕНО: '+str(exc),file=sys.stderr)
-        print('Файлы и история Git не удалены. Подробности загрузки: last_run.log.',file=sys.stderr)
+        print(f'Журнал обновления: {LOG_PATH}',file=sys.stderr)
         return 1
     except KeyboardInterrupt:
         print('\nОбновление прервано пользователем.',file=sys.stderr)
         return 130
 
-if __name__=='__main__':raise SystemExit(main())
+if __name__=='__main__':
+    logging.basicConfig(filename=LOG_PATH, filemode='w', encoding='utf-8',
+                        level=logging.INFO, format='%(asctime)s %(message)s')
+    raise SystemExit(main())

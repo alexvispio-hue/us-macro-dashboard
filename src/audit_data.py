@@ -3,6 +3,7 @@ import datetime as dt
 import json
 import math
 from pathlib import Path
+import sys
 
 ROOT=Path(__file__).resolve().parent.parent
 
@@ -51,6 +52,22 @@ def main():
     if report['errors']:lines+=['## Ошибки',json.dumps(report['errors'],ensure_ascii=False,indent=2)]
     (ROOT/'DATA_AUDIT.md').write_text('\n'.join(lines),encoding='utf-8')
     print(json.dumps(report,ensure_ascii=True,indent=2))
+    issue_names = {
+        'empty': 'пустой ряд',
+        'dates_unsorted_or_duplicated': 'нарушен порядок дат или есть дубликаты',
+        'future_observation': 'наблюдение с будущей датой',
+        'non_finite_value': 'неконечное значение',
+        'last_value_mismatch': 'последнее значение ряда не совпадает со сводкой',
+        'invalid_ohlcv': 'противоречивые данные свечей или объёма',
+    }
+    for finding in report['errors']:
+        date = f" ({finding['date']})" if 'date' in finding else ''
+        issue = issue_names[finding['issue']]
+        print(f"Данные: {finding['series']} · {issue}{date}", file=sys.stderr)
+    for finding in report['source_failures']:
+        print(f"Загрузка: {finding['kind']} · {finding['name']} · {finding['status']}", file=sys.stderr)
+    for finding in report['missing_curve_points']:
+        print(f"Кривая доходности: {finding['curve']} · нет данных для {finding['tenor']}", file=sys.stderr)
     return bool(report['errors'] or report['source_failures'] or report['missing_curve_points'])
 
 if __name__=='__main__':raise SystemExit(main())

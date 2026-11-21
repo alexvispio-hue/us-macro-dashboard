@@ -8,6 +8,8 @@
 
 **`run.bat`** по-прежнему обновляет только локальный `dashboard.html` и открывает его. Для обычного полного обновления сайта теперь используйте **`update_and_publish.bat`**.
 
+Если обновление остановится, батник покажет название шага и сохранит вывод в `last_update.log`. Отчёт аудита сохраняется в `DATA_AUDIT.md`.
+
 Служебные проверки: `python src/update_publish.py --check` проверяет Git без публикации; `python src/update_publish.py --prepare-only --offline` проверяет конвейер на имеющемся кэше. Для пакетного запуска без паузы: `update_and_publish.bat --no-pause --no-open`.
 
 
