@@ -23,7 +23,7 @@ FRED = {
  'PI':'Personal income', 'PCE':'Nominal consumer spending', 'PPIFIS':'PPI final demand',
  'TCU':'Capacity utilization', 'IPMAN':'Manufacturing production',
  'U6RATE':'Broad unemployment', 'CES0500000003':'Average hourly earnings, total private',
- 'CES0500000002':'Average weekly hours, total private',
+ 'AWHAETP':'Average weekly hours, total private',
 }
 YAHOO = {k:k for k in ['SPY','QQQ','IWM','DIA','VT','EFA','EEM','XLK','XLF','XLE','XLV','XLI','XLP','XLY','XLU','XLB','XLRE','XLC','SOXX','GLD','SLV','DBC']}
 YAHOO.update({'BTC':'BTC-USD','ETH':'ETH-USD','WTI':'CL=F','BRENT':'BZ=F','GAS':'NG=F','COPPER':'HG=F','SILVER':'SI=F','WHEAT':'ZW=F','CORN':'ZC=F','SOY':'ZS=F'})
@@ -152,7 +152,7 @@ def build(raw, columns, markets):
     section('us-labor-wages', 'MACRO / USA', 'Зарплаты и рабочие часы', [
         monthly_growth('wages-mom', 'Средняя почасовая зарплата · MoM', 'CES0500000003'),
         monthly_growth('wages-yoy', 'Средняя почасовая зарплата · YoY', 'CES0500000003', 12),
-        p('weekly-hours', 'Средняя продолжительность рабочей недели', 'CES0500000002', 'ч'),
+        p('weekly-hours', 'Средняя продолжительность рабочей недели', 'AWHAETP', 'ч'),
         p('u6', 'Расширенная безработица U-6', 'U6RATE', '%'),
     ], 'Зарплаты и часы относятся к работникам частного сектора. U-6 включает также часть населения вне рабочей силы и занятых неполный день по экономическим причинам.')
     payroll=g('PAYEMS').dropna()
